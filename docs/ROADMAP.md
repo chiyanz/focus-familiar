@@ -7,7 +7,7 @@ The roadmap is ordered to establish secure process boundaries before adding beha
 | Sequence | Feature                                 | Status      | Plan                                            |
 | -------- | --------------------------------------- | ----------- | ----------------------------------------------- |
 | 1        | Application shell and security baseline | Implemented | [001](features/001-application-shell.md)        |
-| 2        | Focus session engine                    | Planned     | [002](features/002-focus-session-engine.md)     |
+| 2        | Focus session engine                    | Implemented | [002](features/002-focus-session-engine.md)     |
 | 3        | Foreground application awareness        | Planned     | [003](features/003-application-awareness.md)    |
 | 4        | Floating pet overlay                    | Planned     | [004](features/004-pet-overlay.md)              |
 | 5        | Nudge and intervention ladder           | Planned     | [005](features/005-nudge-escalation.md)         |

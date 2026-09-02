@@ -44,7 +44,7 @@ Feature plans are living documents. A feature is only marked **Implemented** aft
 | Product direction      | Documented  |
 | Architecture direction | Proposed    |
 | Electron application   | Implemented |
-| Focus features         | Planned     |
+| Focus features         | In progress |
 | GitHub release         | Planned     |
 
 The development baseline requires macOS 13 or newer and Node.js 22.
