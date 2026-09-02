@@ -90,6 +90,39 @@ describe("session activity bridge", () => {
     expect(provider.dispose).toHaveBeenCalledOnce();
   });
 
+  it("can advance at an exact scheduler-provided boundary", async () => {
+    const provider = new FakeActivityProvider();
+    const clock = new FakeClock();
+    const bridge = new SessionActivityBridge(provider, clock);
+    await bridge.startSession("session-1", config);
+
+    bridge.advanceAt(1_000);
+
+    expect(bridge.snapshot()).toMatchObject({
+      phase: "focused",
+      focusedMs: 1_000,
+      lastEventAtMs: 1_000,
+    });
+    expect(clock.value).toBe(0);
+  });
+
+  it("can pause at the last safe scheduler boundary", async () => {
+    const provider = new FakeActivityProvider();
+    const clock = new FakeClock();
+    const bridge = new SessionActivityBridge(provider, clock);
+    await bridge.startSession("session-1", config);
+    bridge.advanceAt(500);
+
+    bridge.pauseAt(500);
+
+    expect(bridge.snapshot()).toMatchObject({
+      phase: "paused",
+      focusedMs: 500,
+      lastEventAtMs: 500,
+    });
+    expect(clock.value).toBe(0);
+  });
+
   it("pauses safely on sleep and does not count sleep or wake as distraction", async () => {
     const provider = new FakeActivityProvider();
     const clock = new FakeClock();
@@ -214,5 +247,76 @@ describe("session activity bridge", () => {
     const result = await bridge.startSession("session-1", config);
     expect(result).toMatchObject({ ok: false, state: { phase: "idle" } });
     expect(onError).toHaveBeenCalledOnce();
+  });
+
+  it("ignores an in-flight start result and observer callbacks after disposal", async () => {
+    const provider = new FakeActivityProvider();
+    let resolveCurrent:
+      | ((result: PlatformResult<ApplicationIdentity>) => void)
+      | undefined;
+    provider.currentApplicationImplementation = () =>
+      new Promise((resolve) => {
+        resolveCurrent = resolve;
+      });
+    const changed = vi.fn();
+    const bridge = new SessionActivityBridge(provider, new FakeClock(), {
+      onStateChanged: changed,
+    });
+    bridge.startMonitoring();
+
+    const pendingStart = bridge.startSession("session-1", config);
+    bridge.dispose();
+    provider.emit({
+      type: "application-activated",
+      atMs: 10,
+      application: browser,
+    });
+    resolveCurrent?.({ ok: true, value: editor });
+
+    await expect(pendingStart).resolves.toMatchObject({
+      ok: false,
+      state: { phase: "idle" },
+      error: { message: "The session activity bridge has been disposed." },
+    });
+    expect(bridge.snapshot().phase).toBe("idle");
+    expect(changed).not.toHaveBeenCalled();
+    expect(provider.dispose).toHaveBeenCalledOnce();
+  });
+
+  it("rejects synchronous commands after disposal without reading the clock", () => {
+    const provider = new FakeActivityProvider();
+    const clock = { nowMs: vi.fn(() => 0) };
+    const bridge = new SessionActivityBridge(provider, clock);
+    bridge.dispose();
+
+    expect(bridge.pause()).toMatchObject({ ok: false });
+    expect(bridge.advance()).toMatchObject({ ok: false });
+    expect(bridge.stop("user")).toMatchObject({ ok: false });
+    expect(clock.nowMs).not.toHaveBeenCalled();
+  });
+
+  it("ignores an in-flight resume result after disposal", async () => {
+    const provider = new FakeActivityProvider();
+    const clock = new FakeClock();
+    const bridge = new SessionActivityBridge(provider, clock);
+    await bridge.startSession("session-1", config);
+    bridge.pauseAt(0);
+
+    let resolveCurrent:
+      | ((result: PlatformResult<ApplicationIdentity>) => void)
+      | undefined;
+    provider.currentApplicationImplementation = () =>
+      new Promise((resolve) => {
+        resolveCurrent = resolve;
+      });
+    const pendingResume = bridge.resume();
+    bridge.dispose();
+    resolveCurrent?.({ ok: true, value: editor });
+
+    await expect(pendingResume).resolves.toMatchObject({
+      ok: false,
+      state: { phase: "paused" },
+    });
+    expect(bridge.snapshot().phase).toBe("paused");
   });
 });

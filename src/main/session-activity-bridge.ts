@@ -32,6 +32,7 @@ export class SessionActivityBridge {
     | (ApplicationActivityEvent & { readonly type: "application-activated" })
     | undefined;
   private applicationRevision = 0;
+  private disposed = false;
 
   constructor(
     private readonly activityProvider: ActivityProvider,
@@ -44,7 +45,7 @@ export class SessionActivityBridge {
   }
 
   startMonitoring(): void {
-    if (this.observation) return;
+    if (this.disposed || this.observation) return;
     this.observation = this.activityProvider.observe((event) =>
       this.handleActivity(event),
     );
@@ -54,8 +55,10 @@ export class SessionActivityBridge {
     sessionId: string,
     config: FocusSessionConfig,
   ): Promise<SessionReduction> {
+    if (this.disposed) return this.disposedFailure();
     const revisionBeforeRequest = this.applicationRevision;
     const current = await this.activityProvider.currentApplication();
+    if (this.disposed) return this.disposedFailure();
     if (!current.ok) return this.platformFailure(current.error);
     const currentApplication =
       this.applicationRevision > revisionBeforeRequest && this.latestApplication
@@ -71,12 +74,21 @@ export class SessionActivityBridge {
   }
 
   pause(): SessionReduction {
-    return this.dispatch({ type: "session-paused", atMs: this.clock.nowMs() });
+    if (this.disposed) return this.disposedFailure();
+    return this.pauseAt(this.clock.nowMs());
+  }
+
+  /** Pauses at an injected fail-safe boundary without consulting wall time. */
+  pauseAt(atMs: number): SessionReduction {
+    if (this.disposed) return this.disposedFailure();
+    return this.dispatch({ type: "session-paused", atMs });
   }
 
   async resume(): Promise<SessionReduction> {
+    if (this.disposed) return this.disposedFailure();
     const revisionBeforeRequest = this.applicationRevision;
     const current = await this.activityProvider.currentApplication();
+    if (this.disposed) return this.disposedFailure();
     if (!current.ok) return this.platformFailure(current.error);
     const currentApplication =
       this.applicationRevision > revisionBeforeRequest && this.latestApplication
@@ -90,6 +102,7 @@ export class SessionActivityBridge {
   }
 
   stop(reason: StopReason): SessionReduction {
+    if (this.disposed) return this.disposedFailure();
     return this.dispatch({
       type: "session-stopped",
       atMs: this.clock.nowMs(),
@@ -98,15 +111,25 @@ export class SessionActivityBridge {
   }
 
   advance(): SessionReduction {
-    return this.dispatch({ type: "time-advanced", atMs: this.clock.nowMs() });
+    if (this.disposed) return this.disposedFailure();
+    return this.advanceAt(this.clock.nowMs());
+  }
+
+  /** Advances to an injected scheduler boundary without consulting wall time. */
+  advanceAt(atMs: number): SessionReduction {
+    if (this.disposed) return this.disposedFailure();
+    return this.dispatch({ type: "time-advanced", atMs });
   }
 
   dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
     this.observation?.dispose();
     this.observation = undefined;
   }
 
   private handleActivity(event: ApplicationActivityEvent): void {
+    if (this.disposed) return;
     if (event.type === "observation-error") {
       this.options.onObservationError?.(event.error);
       this.pauseSafely(event.atMs);
@@ -172,6 +195,17 @@ export class SessionActivityBridge {
       ok: false,
       state: this.state,
       error: { code: "invalid-transition", message: error.message },
+    };
+  }
+
+  private disposedFailure(): SessionReduction {
+    return {
+      ok: false,
+      state: this.state,
+      error: {
+        code: "invalid-transition",
+        message: "The session activity bridge has been disposed.",
+      },
     };
   }
 }

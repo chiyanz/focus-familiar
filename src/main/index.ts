@@ -6,7 +6,7 @@ import { app, BrowserWindow, ipcMain } from "electron";
 
 import { registerIpcHandlers, type ManagedWindow } from "./ipc";
 import { resolveMacOSActivityHelperPath } from "./native-helper";
-import { SessionActivityBridge } from "./session-activity-bridge";
+import { SessionRuntime } from "./session-runtime";
 import {
   getWindowOptions,
   loadRendererWindow,
@@ -22,8 +22,7 @@ const rendererDirectory = join(moduleDirectory, "../renderer");
 const isSmokeTest = process.argv.includes("--smoke-test");
 const managedWindows: ManagedWindow[] = [];
 let isQuitting = false;
-let sessionActivityBridge: SessionActivityBridge | undefined;
-let activityAdapter: MacOSApplicationAdapter | undefined;
+let sessionRuntime: SessionRuntime | undefined;
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -58,7 +57,7 @@ if (!app.requestSingleInstanceLock()) {
       }
     })
     .catch((error: unknown) => {
-      sessionActivityBridge?.dispose();
+      sessionRuntime?.dispose();
       console.error("Focus Familiar failed to start.", error);
       app.exit(1);
     });
@@ -79,7 +78,7 @@ if (!app.requestSingleInstanceLock()) {
 
   app.on("before-quit", () => {
     isQuitting = true;
-    sessionActivityBridge?.dispose();
+    sessionRuntime?.dispose();
   });
 
   app.on("will-quit", () => {
@@ -153,16 +152,28 @@ async function startApplicationAwareness(): Promise<void> {
     isPackaged: app.isPackaged,
     isDevelopment: Boolean(process.env.ELECTRON_RENDERER_URL),
   });
-  activityAdapter = new MacOSApplicationAdapter(
+  const activityAdapter = new MacOSApplicationAdapter(
     new ChildProcessNativeHelperRunner(helperPath),
     clock,
   );
-  sessionActivityBridge = new SessionActivityBridge(activityAdapter, clock, {
-    onObservationError: (error) => {
-      console.error(`Application awareness unavailable: ${error.message}`);
+  sessionRuntime = new SessionRuntime(
+    activityAdapter,
+    activityAdapter,
+    clock,
+    {
+      schedule: (callback, delayMs) => setTimeout(callback, delayMs),
+      cancel: (handle) => clearTimeout(handle),
     },
-  });
-  sessionActivityBridge.startMonitoring();
+    {
+      onRuntimeError: (error) => {
+        console.error(`Focus runtime unavailable: ${error.message}`);
+      },
+      onActivationFailed: ({ error }) => {
+        console.error(`Strict return request failed: ${error.message}`);
+      },
+    },
+  );
+  sessionRuntime.startMonitoring();
 
   if (isSmokeTest) {
     const current = await activityAdapter.currentApplication();
