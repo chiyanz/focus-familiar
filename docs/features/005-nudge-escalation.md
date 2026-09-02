@@ -1,6 +1,6 @@
 # 005: Nudge and intervention ladder
 
-Status: **Planned**
+Status: **In progress**
 
 ## Outcome
 
@@ -12,6 +12,7 @@ Leaving the target application triggers predictable, progressively stronger, and
 - Add visual pet-state changes and concise reminder text.
 - Add a stronger intervention with a return countdown.
 - Provide a clear action to request activation of the target application.
+- In strict mode, request activation once when prolonged distraction reaches the intervention threshold.
 - Provide pause, stop, and emergency-exit actions at every strong intervention.
 - Briefly acknowledge a successful return.
 
@@ -39,4 +40,10 @@ Leaving the target application triggers predictable, progressively stronger, and
 
 ## Implementation notes
 
-Not implemented.
+The nonvisual runtime foundation is in progress. It schedules one-shot callbacks for the next focus, grace, or intervention boundary rather than polling, and it keeps timing behind injected interfaces for deterministic tests.
+
+Strict mode treats entry into the intervention phase as a reversible request for macOS to activate the configured target application. Gentle and balanced modes never activate an application automatically. Repeated state delivery cannot issue repeated requests, returning to focus rearms the next away interval, and restoration into an already-intervening state has no side effect. This is intentionally friction rather than an unbreakable lock: macOS or the user may decline or immediately override activation.
+
+Automated tests cover every schedulable phase, exact and delayed boundaries, long-timer chunking, stale callback cancellation, timer failure, sleep, duplicate intervention states, activation failure, disposal, and late asynchronous results after return, pause, stop, completion, or a newer away episode.
+
+Pet presentation, reminder copy, the visible countdown, manual return controls, and escape controls remain unimplemented pending the selected visual direction.

@@ -90,6 +90,10 @@ interface ApplicationActivator {
 
 The first implementation uses a bundled Swift helper built on `NSWorkspace`. It communicates through a versioned, validated NDJSON protocol and emits only bundle identifiers, localized application names, and lifecycle or error fields. See [ADR 0003](decisions/0003-bundled-macos-workspace-helper.md).
 
+## Runtime deadlines and intervention
+
+The main process schedules only the next absolute focus-session boundary. Injected clock and timer interfaces keep deadline behavior deterministic, and delayed callbacks advance through planned boundaries without converting event-loop delay into product timing. Strict intervention may request activation of the already-running target once per away episode, but only observed foreground changes can return the engine to focused state. See [ADR 0004](decisions/0004-deadline-runtime-and-reversible-intervention.md).
+
 ## Persistence
 
 Persist only what the product needs:
