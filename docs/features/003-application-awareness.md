@@ -1,6 +1,6 @@
 # 003: Foreground application awareness
 
-Status: **Planned**
+Status: **Implemented**
 
 ## Outcome
 
@@ -37,4 +37,17 @@ The main process receives reliable, timestamped changes to the frontmost macOS a
 
 ## Implementation notes
 
-Not implemented. The native integration mechanism remains an explicit decision point.
+- Added a small Swift 6 helper built directly against AppKit and Foundation for macOS 13+. It uses `NSWorkspace` to read the current application, list regular user-facing applications, observe activation/termination/sleep/wake, and request activation of an already-running application.
+- The helper emits a versioned newline-delimited JSON protocol containing only bundle identifiers, localized application names, lifecycle fields, and explicit errors. It never reads window titles, URLs, process IDs, accessibility trees, keystrokes, screenshots, or application content.
+- Observation uses workspace notifications and reconciles against `frontmostApplication` on the next main-loop turn. Wake and application termination trigger fresh foreground snapshots.
+- Added a TypeScript platform boundary with replaceable `ActivityProvider` and `ApplicationActivator` interfaces, injected clocks, runtime protocol validation, bounded output, request and observation-readiness timeouts, duplicate activation suppression, and idempotent disposal.
+- Added a main-process session bridge that forwards normalized activation facts to the pure focus engine. Sleep and observation failure safely pause a running session; wake does not auto-resume, so suspended time cannot become a false distraction interval.
+- Development and production builds compile the helper for the host architecture with a macOS 13 deployment target. Linux CI deliberately skips this platform-specific build; macOS CI compiles it and the Electron smoke test verifies that the helper can report the current application.
+- The helper requires no Accessibility, Screen Recording, Input Monitoring, Full Disk Access, or Automation permission. Activation is a best-effort macOS request and failures remain explicit.
+
+## Verification
+
+- Unit and contract tests cover protocol validation, split UTF-8 frames, bounded output, list completeness/deduplication, current application, activation success/failure, lifecycle deduplication, process failure, and cleanup.
+- Focus-engine integration tests cover foreground transitions plus fail-safe pause across sleep and observation failure.
+- The Swift helper compiles with Swift 6 and its current/list/invalid-activation command paths have been exercised on macOS.
+- Manual switching across VS Code, Terminal, Finder, a browser, Spaces, and sleep/wake remains required before this feature can move to **Verified**.

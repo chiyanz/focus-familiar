@@ -33,6 +33,7 @@ The initial experience will let someone:
 - [Roadmap](docs/ROADMAP.md)
 - [Feature plans and status](docs/features/README.md)
 - [Architecture decisions](docs/decisions/0001-electron-and-typescript.md)
+- [macOS awareness decision](docs/decisions/0003-bundled-macos-workspace-helper.md)
 - [Contributor guide](CONTRIBUTING.md)
 
 Feature plans are living documents. A feature is only marked **Implemented** after its code and automated checks exist, and **Verified** after its acceptance criteria have been exercised.
