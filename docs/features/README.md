@@ -19,7 +19,7 @@ The application shell, deterministic focus engine, and macOS application awarene
 | [Application awareness](003-application-awareness.md)       | Implemented |
 | [Pet overlay](004-pet-overlay.md)                           | Planned     |
 | [Nudge escalation](005-nudge-escalation.md)                 | In progress |
-| [Settings and persistence](006-settings-and-persistence.md) | Planned     |
+| [Settings and persistence](006-settings-and-persistence.md) | In progress |
 | [Custom pet packs](007-custom-pet-packs.md)                 | Planned     |
 | [Packaging and release](008-packaging-and-release.md)       | Planned     |
 

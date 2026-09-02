@@ -1,6 +1,6 @@
 # 006: Settings and local persistence
 
-Status: **Planned**
+Status: **In progress**
 
 ## Outcome
 
@@ -37,4 +37,8 @@ Users can configure sessions and pet behavior, and the app restores safe prefere
 
 ## Implementation notes
 
-Not implemented.
+The nonvisual persistence foundation is in progress. It defines a versioned, runtime-validated local schema with documented defaults and migration behavior, plus an atomic JSON store under the app's per-user data directory.
+
+Recovery intentionally excludes raw foreground-application events and the current non-target application. It retains only the focus contract, accumulated focus/away totals, session identity, and save time, and it always restores as paused so relaunch cannot trigger strict intervention.
+
+The settings form, privacy explanation, reset/delete controls, pet position updates, and launch-at-login integration remain pending with the user-interface work.

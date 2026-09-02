@@ -96,14 +96,25 @@ The main process schedules only the next absolute focus-session boundary. Inject
 
 ## Persistence
 
+The main process stores one runtime-validated, versioned JSON document beneath
+Electron's per-user application-data directory. A schema-specific repository
+sanitizes untrusted reads and writes, while a generic atomic store provides a
+1 MiB read limit, restrictive permissions, uniquely named sibling temporary
+files, atomic replacement, and serialized mutations.
+
 Persist only what the product needs:
 
 - Versioned user preferences
 - Pet selection and position
 - Current session recovery data
-- Minimal session summaries
 
-Do not persist a raw stream of foreground-application changes by default. Any future history feature needs an explicit product and privacy decision.
+Recovery projects live runtime state down to the focus contract, accumulated
+focus/away totals, session identity, and save time. Relaunch reconstructs a
+paused session at a fresh runtime timestamp with no current application, so it
+cannot accrue closed-app time or trigger strict intervention until the user
+explicitly resumes. Raw foreground-application changes and current distraction
+details are not persisted. Any future history feature needs an explicit product
+and privacy decision. See [ADR 0005](decisions/0005-versioned-local-settings.md).
 
 ## Security posture
 
