@@ -8,6 +8,10 @@ import { registerIpcHandlers, type ManagedWindow } from "./ipc";
 import { resolveMacOSActivityHelperPath } from "./native-helper";
 import { SessionRuntime } from "./session-runtime";
 import {
+  resolveSettingsFilePath,
+  SettingsRepository,
+} from "./settings-repository";
+import {
   getWindowOptions,
   loadRendererWindow,
   resolveRendererTarget,
@@ -44,6 +48,7 @@ if (!app.requestSingleInstanceLock()) {
         getWindows: () => managedWindows,
       });
 
+      await loadLocalSettings();
       await startApplicationAwareness();
 
       await createApplicationWindows();
@@ -84,6 +89,22 @@ if (!app.requestSingleInstanceLock()) {
   app.on("will-quit", () => {
     removeIpcHandlers?.();
   });
+}
+
+async function loadLocalSettings(): Promise<void> {
+  const repository = new SettingsRepository(
+    resolveSettingsFilePath(app.getPath("userData")),
+  );
+  const loaded = await repository.load();
+
+  if (!loaded.ok) {
+    console.error(`Local settings unavailable: ${loaded.error.message}`);
+    return;
+  }
+
+  for (const issue of loaded.issues) {
+    console.warn(`Local settings notice: ${issue.message}`);
+  }
 }
 
 async function createApplicationWindows(): Promise<void> {
