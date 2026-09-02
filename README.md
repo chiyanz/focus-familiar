@@ -3,7 +3,7 @@
 Focus Familiar is a local-first desktop pet for macOS that helps you stay with the application you chose for a focus session. The pet remains calm while you work, notices when you drift, and escalates from a gentle reminder to deliberate friction when a distraction continues.
 
 > [!NOTE]
-> The project is in the planning and repository-foundation stage. No application feature is implemented yet.
+> The secure Electron application shell is implemented. Focus behavior is being added in small, reviewable slices.
 
 ## Version 0.1
 
@@ -39,13 +39,24 @@ Feature plans are living documents. A feature is only marked **Implemented** aft
 
 ## Current status
 
-| Area | Status |
-| --- | --- |
-| Product direction | Documented |
-| Architecture direction | Proposed |
-| Electron application | Planned |
-| Focus features | Planned |
-| GitHub release | Planned |
+| Area                   | Status      |
+| ---------------------- | ----------- |
+| Product direction      | Documented  |
+| Architecture direction | Proposed    |
+| Electron application   | Implemented |
+| Focus features         | Planned     |
+| GitHub release         | Planned     |
+
+The development baseline requires macOS 13 or newer and Node.js 22.
+
+## Run the development shell
+
+```bash
+npm install
+npm run dev
+```
+
+Run static checks, tests, and a production build with `npm run verify`. On macOS, `npm run test:electron-smoke` also launches the built app, checks its renderer security boundary, and confirms a clean shutdown.
 
 ## License
 

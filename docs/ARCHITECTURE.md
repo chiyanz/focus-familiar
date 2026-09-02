@@ -78,7 +78,9 @@ Operating-system behavior will sit behind interfaces such as:
 ```ts
 interface ActivityProvider {
   currentApplication(): Promise<ForegroundApplication>;
-  onApplicationChanged(listener: (app: ForegroundApplication) => void): Disposable;
+  onApplicationChanged(
+    listener: (app: ForegroundApplication) => void,
+  ): Disposable;
 }
 
 interface ApplicationActivator {
