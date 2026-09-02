@@ -29,7 +29,7 @@ const compiler = spawn(
   [
     "swiftc",
     "-swift-version",
-    "6",
+    "5",
     "-target",
     `${targetArchitecture}-apple-macosx13.0`,
     "-O",
