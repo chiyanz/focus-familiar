@@ -1,6 +1,6 @@
 # 001: Application shell and security baseline
 
-Status: **Planned**
+Status: **Implemented**
 
 ## Outcome
 
@@ -39,4 +39,15 @@ A development build launches as a macOS Electron application with secure main, p
 
 ## Implementation notes
 
-Not implemented.
+- Added separate Electron main, sandboxed preload, pet renderer, and settings renderer entry points.
+- Added a narrow typed IPC bridge. The main process validates both payloads and the sending renderer before handling a request.
+- Added navigation and pop-up guards, explicit secure window options, a single-instance lifecycle, and a temporary `file://` production renderer target constrained to fixed application-owned files. A custom application protocol remains release-hardening work.
+- Added a small CSS-drawn placeholder pet and opaque settings window. Both honor the operating system's reduced-motion preference.
+- Added automated boundary tests, an Electron startup/security/shutdown smoke test, and CI on Ubuntu and macOS.
+- Version 0.1 now requires macOS 13 or newer because Electron 44 no longer supports macOS 12.
+
+## Verification
+
+- Automated format, lint, type-check, unit-test, production-build, and package checks: implemented in CI.
+- Electron runtime boundary and clean shutdown: covered by `npm run test:electron-smoke` on macOS.
+- Visual behavior across multiple displays, Spaces, and full-screen applications remains to be manually verified before this feature can move to **Verified**.

@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws://localhost:* http://localhost:* ws://127.0.0.1:* http://127.0.0.1:*"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Focus Familiar</title>
+    <link rel="stylesheet" href="./pet.css" />
+  </head>
+  <body>
+    <main class="pet-shell" aria-label="Focus Familiar">
+      <button
+        class="pet"
+        id="open-settings"
+        type="button"
+        aria-label="Open settings"
+      >
+        <span class="ear ear-left"></span>
+        <span class="ear ear-right"></span>
+        <span class="face">
+          <span class="eye eye-left"></span>
+          <span class="eye eye-right"></span>
+          <span class="mouth"></span>
+        </span>
+      </button>
+      <p class="hint" id="pet-hint">Ready when you are.</p>
+    </main>
+    <script type="module" src="./pet.ts"></script>
+  </body>
+</html>

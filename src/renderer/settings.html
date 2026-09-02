@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws://localhost:* http://localhost:* ws://127.0.0.1:* http://127.0.0.1:*"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Focus Familiar settings</title>
+    <link rel="stylesheet" href="./settings.css" />
+  </head>
+  <body>
+    <main class="settings-shell">
+      <p class="eyebrow">Focus Familiar</p>
+      <h1>Your gentle focus companion</h1>
+      <p class="intro">
+        The secure application shell is ready. Focus sessions and app awareness
+        arrive in the next slices.
+      </p>
+      <section class="privacy-card" aria-labelledby="privacy-title">
+        <span aria-hidden="true">◌</span>
+        <div>
+          <h2 id="privacy-title">Private by design</h2>
+          <p>
+            No activity leaves your Mac. This build does not inspect content or
+            keystrokes.
+          </p>
+        </div>
+      </section>
+      <footer>
+        <span id="app-version">Loading version…</span>
+        <button id="close-settings" type="button">Done</button>
+      </footer>
+    </main>
+    <script type="module" src="./settings.ts"></script>
+  </body>
+</html>
