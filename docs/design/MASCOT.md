@@ -132,3 +132,7 @@ consistent logical dimensions, state-specific frames, and animation timing.
 
 Behavior research and the first generated action sheets live in
 [BEHAVIOR_REFERENCES.md](BEHAVIOR_REFERENCES.md).
+
+Every figure and animation frame is also available as an individual
+alpha-channel PNG under
+[assets/shokupan-cat/isolated](assets/shokupan-cat/isolated/README.md).

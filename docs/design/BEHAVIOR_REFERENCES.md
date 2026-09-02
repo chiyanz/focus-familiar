@@ -86,3 +86,6 @@ motion uses a still pose plus slow blink only.
 
 These images are selection and timing references. They are not aligned,
 pixel-clean production sprite sheets.
+
+Individual transparent PNGs for every cell are indexed under
+[assets/shokupan-cat/isolated](assets/shokupan-cat/isolated/README.md).
