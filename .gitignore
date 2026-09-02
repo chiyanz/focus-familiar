@@ -1,0 +1,14 @@
+.DS_Store
+node_modules/
+dist/
+out/
+release/
+coverage/
+*.log
+.env
+.env.*
+!.env.example
+
+# Codex desktop workspace folders are not part of the product.
+/work/
+/outputs/
