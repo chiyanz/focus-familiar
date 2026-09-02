@@ -88,7 +88,7 @@ interface ApplicationActivator {
 }
 ```
 
-The first implementation may use a maintained native dependency or a bundled Swift helper. That choice requires a focused security and maintenance review before adoption.
+The first implementation uses a bundled Swift helper built on `NSWorkspace`. It communicates through a versioned, validated NDJSON protocol and emits only bundle identifiers, localized application names, and lifecycle or error fields. See [ADR 0003](decisions/0003-bundled-macos-workspace-helper.md).
 
 ## Persistence
 

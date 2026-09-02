@@ -4,6 +4,7 @@ dist/
 out/
 release/
 coverage/
+native/macos/.build/
 *.log
 .env
 .env.*

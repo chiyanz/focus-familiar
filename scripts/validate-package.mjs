@@ -1,4 +1,5 @@
-import { readFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import { access, readFile } from "node:fs/promises";
 import process from "node:process";
 
 const packageJson = JSON.parse(
@@ -7,6 +8,7 @@ const packageJson = JSON.parse(
 const requiredScripts = [
   "dev",
   "build",
+  "build:native",
   "format:check",
   "lint",
   "typecheck",
@@ -35,6 +37,17 @@ if (Object.keys(packageJson.dependencies ?? {}).length > 0) {
   errors.push(
     "runtime dependencies are not permitted in the application shell",
   );
+}
+
+if (process.platform === "darwin") {
+  try {
+    await access(
+      new URL("../out/native/focus-familiar-activity", import.meta.url),
+      constants.X_OK,
+    );
+  } catch {
+    errors.push("the built macOS activity helper is missing or not executable");
+  }
 }
 
 if (errors.length > 0) {

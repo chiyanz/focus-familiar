@@ -9,8 +9,9 @@
     "node": "^22.20.0 || >=24.0.0"
   },
   "scripts": {
-    "dev": "electron-vite dev",
-    "build": "electron-vite build",
+    "dev": "npm run build:native && electron-vite dev",
+    "build": "electron-vite build && npm run build:native -- --output=out/native/focus-familiar-activity",
+    "build:native": "node scripts/build-native.mjs",
     "preview": "electron-vite preview",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
