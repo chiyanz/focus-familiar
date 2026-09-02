@@ -7,10 +7,9 @@ image-generation prompts. The character name is provisional.
 
 ## Canonical reference
 
-![Four controlled shokupan-cat design directions](assets/shokupan-cat-design-directions-v1.png)
+![Canonical Shokupan cat](assets/shokupan-cat/isolated/designs/design-01-crust-cap.png)
 
-The **far-left candidate (design 1)** is the selected direction. The other
-three candidates are comparison material, not alternate canonical designs.
+This crust-cap Shokupan cat is the canonical character direction.
 
 ## Locked character identity
 
@@ -126,9 +125,10 @@ generation, then append the requested pose or state:
 
 ## Asset status
 
-The reference sheet is concept art, not a production sprite sheet. Production
-assets still require a finalized proportion model, transparent backgrounds,
-consistent logical dimensions, state-specific frames, and animation timing.
+The canonical design and individual action/reaction images are concept art, not
+production sprite sheets. Production assets still require a finalized
+proportion model, consistent logical dimensions, state-specific frames, and
+animation timing.
 
 Behavior research and the first generated action sheets live in
 [BEHAVIOR_REFERENCES.md](BEHAVIOR_REFERENCES.md).

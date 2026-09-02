@@ -76,16 +76,13 @@ motion uses a still pose plus slow blink only.
 - **Returned:** blink, brief blep, or compact resettle.
 - **Completed:** long stretch or belly-up flop; exact direction is not locked.
 
-## Generated concept sheets
+## Generated concept assets
 
-![Idle action key poses](assets/shokupan-cat/idle-action-keyposes-v1.png)
+The retained transparent PNGs are grouped into
+[idle actions](assets/shokupan-cat/isolated/idle-actions),
+[breathing-loop frames](assets/shokupan-cat/isolated/idle-loop), and
+[reaction key poses](assets/shokupan-cat/isolated/reactions). They are selection
+and timing references, not aligned, pixel-clean production sprite sheets.
 
-![Calm breathing loop concept](assets/shokupan-cat/idle-breathing-loop-v1.png)
-
-![Meme-inspired reaction key poses](assets/shokupan-cat/reaction-keyposes-v1.png)
-
-These images are selection and timing references. They are not aligned,
-pixel-clean production sprite sheets.
-
-Individual transparent PNGs for every cell are indexed under
+The full asset inventory is documented under
 [assets/shokupan-cat/isolated](assets/shokupan-cat/isolated/README.md).

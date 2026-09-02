@@ -1,31 +1,22 @@
 # Isolated Shokupan-cat concept assets
 
-Each multi-pose concept sheet has been split into one transparent PNG per grid
-cell. The files retain a consistent cell canvas within each group so animation
+The approved mascot design and each retained pose are stored as separate
+transparent PNGs. Files within an animation group retain a consistent canvas so
 frames do not jump when exchanged.
 
 ## Contents
 
-- `designs/`: four early character-design directions
+- `designs/`: the canonical crust-cap Shokupan-cat design
 - `idle-actions/`: eight optional idle-action key poses
 - `idle-loop/`: eight ordered breathing-loop frames
 - `reactions/`: eight focus-state and meme-inspired reaction key poses
 
-The files have real alpha channels. They remain generated concept art, not
-pixel-clean production sprites; final frames still need manual alignment,
-palette cleanup, and animation review.
+There are 25 retained files: one canonical design, eight idle actions, eight
+breathing-loop frames, and eight reactions. Each has a real alpha channel while
+preserving the cat's cream and white interior pixels.
 
-## Rebuild
-
-The extraction is deterministic and does not regenerate or repaint the source
-art. It crops the documented source grids and flood-fills only background-like
-pixels connected to the outside edge. It deliberately does **not** apply a
-global color key, because the cat's cream fur is close to the source background
-color. A validation pass rejects any enclosed transparent holes:
-
-```sh
-node scripts/split-design-sheets.mjs
-```
-
-The script requires `ffmpeg` and `ffprobe` on the local development machine.
-It validates each source sheet's dimensions before writing any group.
+These remain generated concept art, not pixel-clean production sprites; final
+frames still need manual alignment, palette cleanup, and animation review. The
+consolidated source sheets and rejected design directions were intentionally
+removed after isolation. They remain recoverable from Git history if needed for
+provenance or debugging.
