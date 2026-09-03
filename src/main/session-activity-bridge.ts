@@ -56,6 +56,8 @@ export class SessionActivityBridge {
     config: FocusSessionConfig,
   ): Promise<SessionReduction> {
     if (this.disposed) return this.disposedFailure();
+    const startsAfterEndedSession =
+      this.state.phase === "completed" || this.state.phase === "stopped";
     const revisionBeforeRequest = this.applicationRevision;
     const current = await this.activityProvider.currentApplication();
     if (this.disposed) return this.disposedFailure();
@@ -64,6 +66,10 @@ export class SessionActivityBridge {
       this.applicationRevision > revisionBeforeRequest && this.latestApplication
         ? this.latestApplication.application
         : current.value;
+    // Ended reducer snapshots remain immutable. A new user request starts a
+    // distinct session from fresh idle state after platform prerequisites
+    // have succeeded, rather than mutating the ended session.
+    if (startsAfterEndedSession) this.state = createIdleSession();
     return this.dispatch({
       type: "session-started",
       atMs: this.clock.nowMs(),

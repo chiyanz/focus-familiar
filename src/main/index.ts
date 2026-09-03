@@ -1,10 +1,21 @@
+import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 
-import { app, BrowserWindow, ipcMain } from "electron";
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  type MessageBoxOptions,
+} from "electron";
 
-import { registerIpcHandlers, type ManagedWindow } from "./ipc";
+import {
+  publishSessionSnapshot,
+  registerIpcHandlers,
+  type ManagedWindow,
+} from "./ipc";
 import { resolveMacOSActivityHelperPath } from "./native-helper";
 import { SessionRuntime } from "./session-runtime";
 import {
@@ -19,6 +30,7 @@ import {
 } from "./windows";
 import { ChildProcessNativeHelperRunner } from "../platform/macos/helper-runner";
 import { MacOSApplicationAdapter } from "../platform/macos/macos-application-adapter";
+import type { ActivityProvider } from "../platform/application";
 
 const moduleDirectory = dirname(fileURLToPath(import.meta.url));
 const preloadPath = join(moduleDirectory, "../preload/index.cjs");
@@ -27,6 +39,7 @@ const isSmokeTest = process.argv.includes("--smoke-test");
 const managedWindows: ManagedWindow[] = [];
 let isQuitting = false;
 let sessionRuntime: SessionRuntime | undefined;
+let applicationProvider: ActivityProvider | undefined;
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -46,6 +59,9 @@ if (!app.requestSingleInstanceLock()) {
         app,
         ipcMain,
         getWindows: () => managedWindows,
+        getApplicationProvider: () => applicationProvider,
+        getSessionController: () => sessionRuntime,
+        createSessionId: randomUUID,
       });
 
       await loadLocalSettings();
@@ -176,6 +192,60 @@ async function verifySmokeBoundary(): Promise<void> {
       );
     }
   }
+
+  if (process.platform === "darwin") {
+    const settingsWindow = findWindow("settings");
+    if (!settingsWindow) throw new Error("Settings window is unavailable.");
+    const sessionResult = await settingsWindow.webContents.executeJavaScript(`
+      (async () => {
+        const applications = await window.focusFamiliar.listApplications();
+        const targetApplication = applications[0];
+        if (!targetApplication) return { ok: false, reason: "no-applications" };
+        const started = await window.focusFamiliar.startSession({
+          task: "Verify the packaged prototype",
+          targetApplication,
+          durationMs: 60000,
+          gracePeriodMs: 1000,
+          interventionAfterMs: 3000,
+          intensity: "balanced"
+        });
+        const paused = await window.focusFamiliar.requestSessionAction("pause");
+        const resumed = await window.focusFamiliar.requestSessionAction("resume");
+        const stopped = await window.focusFamiliar.requestSessionAction("stop");
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        return {
+          ok: true,
+          applicationCount: applications.length,
+          phases: [started.phase, paused.phase, resumed.phase, stopped.phase],
+          renderedStatus: document.querySelector("#status-label")?.textContent,
+          startEnabled: !document.querySelector("#start-session")?.disabled,
+          pauseDisabled: document.querySelector("#pause-session")?.disabled,
+          stopDisabled: document.querySelector("#stop-session")?.disabled
+        };
+      })()
+    `);
+    if (
+      !sessionResult.ok ||
+      sessionResult.applicationCount < 1 ||
+      sessionResult.phases[1] !== "paused" ||
+      sessionResult.phases[3] !== "stopped" ||
+      sessionResult.renderedStatus !== "Session stopped" ||
+      !sessionResult.startEnabled ||
+      !sessionResult.pauseDisabled ||
+      !sessionResult.stopDisabled
+    ) {
+      throw new Error(
+        `Live session smoke check failed: ${JSON.stringify(sessionResult)}`,
+      );
+    }
+
+    const petPhase = await findWindow("pet")?.webContents.executeJavaScript(
+      'document.querySelector(".pet-shell")?.dataset.petPhase',
+    );
+    if (petPhase !== "stopped") {
+      throw new Error(`Pet live phase smoke check failed: ${String(petPhase)}`);
+    }
+  }
 }
 
 async function startApplicationAwareness(): Promise<void> {
@@ -194,6 +264,7 @@ async function startApplicationAwareness(): Promise<void> {
     new ChildProcessNativeHelperRunner(helperPath),
     clock,
   );
+  applicationProvider = activityAdapter;
   sessionRuntime = new SessionRuntime(
     activityAdapter,
     activityAdapter,
@@ -203,11 +274,20 @@ async function startApplicationAwareness(): Promise<void> {
       cancel: (handle) => clearTimeout(handle),
     },
     {
+      onStateChanged: (state) => publishSessionSnapshot(managedWindows, state),
       onRuntimeError: (error) => {
         console.error(`Focus runtime unavailable: ${error.message}`);
+        showRuntimeNotice(
+          "Focus monitoring needs attention",
+          `${error.message} Any running focus session was paused safely.`,
+        );
       },
       onActivationFailed: ({ error }) => {
         console.error(`Strict return request failed: ${error.message}`);
+        showRuntimeNotice(
+          "Please return to your focus app",
+          `${error.message} Focus Familiar did not close or block any application.`,
+        );
       },
     },
   );
@@ -221,4 +301,21 @@ async function startApplicationAwareness(): Promise<void> {
       );
     }
   }
+}
+
+function showRuntimeNotice(message: string, detail: string): void {
+  if (isSmokeTest || isQuitting) return;
+  const settings = findWindow("settings");
+  settings?.show();
+  if (settings) settings.focus();
+  const options: MessageBoxOptions = {
+    type: "warning",
+    title: "Focus Familiar",
+    message,
+    detail,
+    buttons: ["OK"],
+    noLink: true,
+  };
+  if (settings) void dialog.showMessageBox(settings, options);
+  else void dialog.showMessageBox(options);
 }

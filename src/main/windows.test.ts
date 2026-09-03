@@ -47,8 +47,8 @@ describe("BrowserWindow security baseline", () => {
 
     expect(options).toMatchObject({
       frame: true,
-      width: 480,
-      height: 420,
+      width: 520,
+      height: 720,
     });
     expect(options).not.toHaveProperty("alwaysOnTop");
     expect(options).not.toHaveProperty("skipTaskbar");
