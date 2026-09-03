@@ -53,6 +53,12 @@ every phase mapping, timeline timing and cancellation, and bundled asset path;
 the Electron startup smoke test verifies that the pet follows a live session
 through stop.
 
+The Shokupan source poses and bundled runtime frames also have a reproducible
+one-pixel cocoa contour outside their silhouettes. It removes pale edge fringe
+on dark desktops without flattening the PNG transparency. The visual lab
+includes a dark-canvas toggle, and the macOS CI job validates every source and
+runtime PNG with the same idempotent edge tool.
+
 Still pending before this feature can be implemented or verified: persisting
 drag position, recovering the pet after display changes, manual
 multi-display/Spaces/full-screen checks on a supported Mac, and final production

@@ -13,6 +13,7 @@ const requiredScripts = [
   "lint",
   "typecheck",
   "test",
+  "test:sprite-edges",
   "verify",
   "prototype",
   "release:macos",

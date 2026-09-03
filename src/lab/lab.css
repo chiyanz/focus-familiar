@@ -351,6 +351,14 @@ h2 {
   --stage-end: #eee9e7;
 }
 
+.pet-stage[data-dark-canvas="true"] {
+  --stage-accent: #d99b6f;
+  --stage-glow: rgb(205 126 70 / 10%);
+  --stage-start: #262427;
+  --stage-end: #181719;
+  border-color: #454047;
+}
+
 .pet-stage img {
   position: relative;
   z-index: 2;

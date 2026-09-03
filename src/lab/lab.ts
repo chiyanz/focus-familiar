@@ -73,6 +73,7 @@ const phaseButtons = Array.from(
   document.querySelectorAll<HTMLButtonElement>("[data-phase]"),
 );
 const reduceMotionInput = requireElement<HTMLInputElement>("#reduce-motion");
+const darkCanvasInput = requireElement<HTMLInputElement>("#dark-canvas");
 const autoDemoInput = requireElement<HTMLInputElement>("#auto-demo");
 
 let currentPhase: SessionPhase = "idle";
@@ -177,6 +178,10 @@ reduceMotionInput.checked = window.matchMedia(
   "(prefers-reduced-motion: reduce)",
 ).matches;
 reduceMotionInput.addEventListener("change", () => renderPhase(currentPhase));
+
+darkCanvasInput.addEventListener("change", () => {
+  stage.dataset.darkCanvas = String(darkCanvasInput.checked);
+});
 
 autoDemoInput.addEventListener("change", () => {
   if (autoDemoInput.checked) startDemo();
