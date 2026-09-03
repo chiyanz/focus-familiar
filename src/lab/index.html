@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ws://localhost:* http://localhost:* ws://127.0.0.1:*"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#fff8f1" />
+    <title>Focus Familiar · Pet presentation lab</title>
+    <link rel="stylesheet" href="./lab.css" />
+  </head>
+  <body>
+    <div class="lab-shell">
+      <header class="lab-header">
+        <div class="brand-mark" aria-hidden="true">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+        <div class="header-copy">
+          <p class="eyebrow">Focus Familiar <span>/</span> developer preview</p>
+          <h1>Give the little one a mood.</h1>
+          <p class="intro">
+            A tiny, local playground for checking how the pet responds through a
+            focus session. Pick a phase, adjust motion, and watch the real
+            bundled artwork in your browser.
+          </p>
+        </div>
+        <span class="local-pill"
+          ><span aria-hidden="true"></span> Local only</span
+        >
+      </header>
+
+      <main class="lab-grid">
+        <section class="preview-card" aria-labelledby="preview-title">
+          <div class="card-heading">
+            <div>
+              <p class="section-kicker">Live canvas</p>
+              <h2 id="preview-title">Your focus companion</h2>
+            </div>
+            <span class="phase-badge" id="phase-badge">Ready</span>
+          </div>
+
+          <div
+            class="pet-stage"
+            id="pet-stage"
+            data-phase="idle"
+            aria-label="Pet presentation preview"
+          >
+            <div class="stage-orbit orbit-one" aria-hidden="true"></div>
+            <div class="stage-orbit orbit-two" aria-hidden="true"></div>
+            <div class="stage-spark spark-one" aria-hidden="true">✦</div>
+            <div class="stage-spark spark-two" aria-hidden="true">·</div>
+            <div class="pet-plinth" aria-hidden="true"></div>
+            <img
+              id="pet-image"
+              src=""
+              alt="Shokupan cat, ready to focus"
+              width="320"
+              height="320"
+            />
+            <div class="stage-caption" aria-hidden="true">
+              <span class="caption-dot"></span>
+              <span>presentation is alive</span>
+            </div>
+          </div>
+
+          <div class="preview-summary">
+            <div>
+              <p class="summary-label">Current phase</p>
+              <p class="summary-value" id="phase-name">Ready to focus</p>
+            </div>
+            <div class="summary-detail">
+              <p class="summary-label">Presentation</p>
+              <p class="summary-value" id="mode-summary">Still frame</p>
+            </div>
+          </div>
+          <p
+            class="status-message"
+            id="status-message"
+            role="status"
+            aria-live="polite"
+          >
+            Ready when you are.
+          </p>
+        </section>
+
+        <section class="controls-card" aria-labelledby="controls-title">
+          <div class="card-heading controls-heading">
+            <div>
+              <p class="section-kicker">Try a state</p>
+              <h2 id="controls-title">Session phases</h2>
+            </div>
+            <span class="phase-count">8 states</span>
+          </div>
+
+          <div
+            class="phase-grid"
+            id="phase-grid"
+            role="group"
+            aria-label="Choose a session phase"
+          >
+            <button
+              class="phase-button"
+              type="button"
+              data-phase="idle"
+              aria-pressed="true"
+            >
+              <span class="phase-icon" aria-hidden="true">○</span>
+              <span class="phase-button-copy"
+                ><strong>Ready</strong><small>Idle</small></span
+              >
+            </button>
+            <button
+              class="phase-button"
+              type="button"
+              data-phase="focused"
+              aria-pressed="false"
+            >
+              <span class="phase-icon" aria-hidden="true">◒</span>
+              <span class="phase-button-copy"
+                ><strong>Focused</strong><small>In the zone</small></span
+              >
+            </button>
+            <button
+              class="phase-button"
+              type="button"
+              data-phase="grace"
+              aria-pressed="false"
+            >
+              <span class="phase-icon" aria-hidden="true">◌</span>
+              <span class="phase-button-copy"
+                ><strong>Gentle glance</strong><small>Grace</small></span
+              >
+            </button>
+            <button
+              class="phase-button"
+              type="button"
+              data-phase="nudge"
+              aria-pressed="false"
+            >
+              <span class="phase-icon" aria-hidden="true">⌁</span>
+              <span class="phase-button-copy"
+                ><strong>Small nudge</strong><small>Nudge</small></span
+              >
+            </button>
+            <button
+              class="phase-button"
+              type="button"
+              data-phase="intervention"
+              aria-pressed="false"
+            >
+              <span class="phase-icon" aria-hidden="true">!</span>
+              <span class="phase-button-copy"
+                ><strong>Return</strong><small>Intervention</small></span
+              >
+            </button>
+            <button
+              class="phase-button"
+              type="button"
+              data-phase="paused"
+              aria-pressed="false"
+            >
+              <span class="phase-icon" aria-hidden="true">Ⅱ</span>
+              <span class="phase-button-copy"
+                ><strong>Paused</strong><small>On hold</small></span
+              >
+            </button>
+            <button
+              class="phase-button"
+              type="button"
+              data-phase="completed"
+              aria-pressed="false"
+            >
+              <span class="phase-icon" aria-hidden="true">✓</span>
+              <span class="phase-button-copy"
+                ><strong>Complete</strong><small>Finished</small></span
+              >
+            </button>
+            <button
+              class="phase-button"
+              type="button"
+              data-phase="stopped"
+              aria-pressed="false"
+            >
+              <span class="phase-icon" aria-hidden="true">—</span>
+              <span class="phase-button-copy"
+                ><strong>Stopped</strong><small>Ended early</small></span
+              >
+            </button>
+          </div>
+
+          <div class="control-divider" aria-hidden="true"></div>
+
+          <div class="preview-options" aria-labelledby="options-title">
+            <p class="section-kicker" id="options-title">Preview options</p>
+            <label class="toggle-row">
+              <span class="toggle-copy">
+                <strong>Reduce motion</strong>
+                <small>Show still frames and respect system comfort.</small>
+              </span>
+              <input id="reduce-motion" type="checkbox" />
+              <span class="toggle-track" aria-hidden="true"><span></span></span>
+            </label>
+            <label class="toggle-row">
+              <span class="toggle-copy">
+                <strong>Automatic phase demo</strong>
+                <small>Cycle through every state every 1.8 seconds.</small>
+              </span>
+              <input id="auto-demo" type="checkbox" />
+              <span class="toggle-track" aria-hidden="true"><span></span></span>
+            </label>
+          </div>
+
+          <div class="developer-note">
+            <span class="note-icon" aria-hidden="true">⌘</span>
+            <p>
+              This page only previews presentation. It does not open Electron,
+              inspect your apps, or access a preload bridge.
+            </p>
+          </div>
+        </section>
+      </main>
+
+      <footer class="lab-footer">
+        <p>
+          <span class="footer-pip" aria-hidden="true"></span> Bundled Shokupan
+          cat assets
+        </p>
+        <p>Vite lab · presentation mapping shared with the app</p>
+      </footer>
+    </div>
+    <script type="module" src="./lab.ts"></script>
+  </body>
+</html>

@@ -1,5 +1,6 @@
 {
   "name": "focus-familiar",
+  "productName": "Focus Familiar",
   "version": "0.1.0",
   "description": "A local-first productivity pet for macOS.",
   "private": true,
@@ -10,6 +11,8 @@
   },
   "scripts": {
     "dev": "npm run build:native && electron-vite dev",
+    "lab": "vite --config vite.lab.config.ts",
+    "lab:build": "vite build --config vite.lab.config.ts",
     "build": "electron-vite build && npm run build:native -- --output=out/native/focus-familiar-activity",
     "build:native": "node scripts/build-native.mjs",
     "preview": "electron-vite preview",
@@ -20,8 +23,11 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:electron-smoke": "npm run build && node scripts/electron-smoke.mjs",
+    "package:macos": "npm run build && node scripts/package-macos.mjs",
+    "test:packaged-smoke": "node scripts/packaged-smoke.mjs",
+    "prototype": "npm run package:macos && npm run test:packaged-smoke",
     "package:validate": "node scripts/validate-package.mjs",
-    "verify": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run build && npm run package:validate"
+    "verify": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run build && npm run lab:build && npm run package:validate"
   },
   "devDependencies": {
     "@eslint/js": "9.39.5",
