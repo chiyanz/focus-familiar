@@ -1,4 +1,5 @@
 import type { SessionPhase } from "../core";
+import type { SessionSnapshot } from "../shared/ipc";
 
 /**
  * The renderer's deliberately small asset vocabulary. Keeping paths here
@@ -129,22 +130,22 @@ export const PET_PRESENTATIONS = {
     statusText: "Focused with you",
   },
   grace: {
-    timeline: [{ asset: PET_ASSET_PATHS.graceGlance, durationMs: null }],
+    timeline: [{ asset: PET_ASSET_PATHS.idleNeutral, durationMs: null }],
     mode: "still",
     provisional: false,
-    statusText: "A gentle glance · come back when ready",
+    statusText: "Come back when ready",
   },
   nudge: {
-    timeline: [{ asset: PET_ASSET_PATHS.nudgeStare, durationMs: null }],
+    timeline: [{ asset: PET_ASSET_PATHS.idleNeutral, durationMs: null }],
     mode: "still",
     provisional: false,
-    statusText: "Let’s return to your focus app",
+    statusText: "Let’s head back",
   },
   intervention: {
-    timeline: [{ asset: PET_ASSET_PATHS.interventionWait, durationMs: null }],
+    timeline: [{ asset: PET_ASSET_PATHS.idleNeutral, durationMs: null }],
     mode: "still",
-    provisional: true,
-    statusText: "Please return to your focus app",
+    provisional: false,
+    statusText: "Time to return",
   },
   paused: {
     timeline: [{ asset: PET_ASSET_PATHS.idleNeutral, durationMs: null }],
@@ -153,9 +154,9 @@ export const PET_PRESENTATIONS = {
     statusText: "Focus session paused",
   },
   completed: {
-    timeline: [{ asset: PET_ASSET_PATHS.forwardStretch, durationMs: null }],
+    timeline: [{ asset: PET_ASSET_PATHS.idleNeutral, durationMs: null }],
     mode: "still",
-    provisional: true,
+    provisional: false,
     statusText: "Focus session complete",
   },
   stopped: {
@@ -165,6 +166,55 @@ export const PET_PRESENTATIONS = {
     statusText: "Focus session stopped",
   },
 } as const satisfies Record<SessionPhase, PetPresentationDefinition>;
+
+export const PET_INTERVENTION_REMINDER_INTERVAL_MS = 15_000;
+
+export interface PetSnapshotStatus {
+  readonly statusText: string;
+  readonly attentionLevel: 0 | 1 | 2 | 3;
+  readonly reminderBeat: number;
+}
+
+/**
+ * Derive stronger but reversible intervention feedback from the sanitized
+ * session snapshot. This remains presentation-only: it never changes policy
+ * or activates an application.
+ */
+export function getPetSnapshotStatus(
+  snapshot: SessionSnapshot,
+): PetSnapshotStatus {
+  const base = PET_PRESENTATIONS[snapshot.phase].statusText;
+  if (
+    snapshot.phase !== "intervention" ||
+    snapshot.interventionAfterMs === null
+  ) {
+    return { statusText: base, attentionLevel: 0, reminderBeat: 0 };
+  }
+
+  const elapsedAfterThreshold = Math.max(
+    0,
+    snapshot.currentAwayMs - snapshot.interventionAfterMs,
+  );
+  const reminderBeat = Math.floor(
+    elapsedAfterThreshold / PET_INTERVENTION_REMINDER_INTERVAL_MS,
+  );
+  const attentionLevel = Math.min(3, 1 + Math.floor(reminderBeat / 2)) as
+    | 1
+    | 2
+    | 3;
+  const targetName = snapshot.targetApplication?.name ?? "your focus app";
+  const copy = [
+    `Time to return to ${targetName}`,
+    `${targetName} is waiting`,
+    `Let’s return to ${targetName}`,
+  ] as const;
+
+  return {
+    statusText: copy[Math.min(copy.length - 1, attentionLevel - 1)] ?? copy[0],
+    attentionLevel,
+    reminderBeat,
+  };
+}
 
 /**
  * Resolve one immutable renderer presentation for a core phase. Reduced

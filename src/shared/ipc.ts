@@ -6,6 +6,7 @@ export const IPC_CHANNELS = {
   checkForUpdates: "updates:check",
   openUpdateRelease: "updates:open-release",
   windowAction: "window:action",
+  petWindowDrag: "window:pet-drag",
   getPetWindowPreferences: "settings:get-pet-window-preferences",
   setPetWindowSize: "settings:set-pet-window-size",
   listApplications: "applications:list",
@@ -36,6 +37,17 @@ export const WINDOW_ACTIONS = [
 ] as const;
 
 export type WindowAction = (typeof WINDOW_ACTIONS)[number];
+
+export const PET_WINDOW_DRAG_PHASES = ["start", "move", "end"] as const;
+
+export type PetWindowDragPhase = (typeof PET_WINDOW_DRAG_PHASES)[number];
+
+/** Pointer coordinates used only to move the local, frameless pet window. */
+export interface PetWindowDragEvent {
+  readonly phase: PetWindowDragPhase;
+  readonly screenX: number;
+  readonly screenY: number;
+}
 
 export const SESSION_ACTIONS = ["pause", "resume", "stop"] as const;
 
@@ -158,6 +170,7 @@ export interface FocusFamiliarApi {
     listener: (status: UpdateStatus) => void,
   ) => () => void;
   readonly requestWindowAction: (action: WindowAction) => Promise<void>;
+  readonly dragPetWindow: (event: PetWindowDragEvent) => Promise<void>;
   readonly getPetWindowPreferences: () => Promise<PetWindowPreferences>;
   readonly setPetWindowSize: (sizePx: number) => Promise<PetWindowPreferences>;
   readonly listApplications: () => Promise<readonly ApplicationSummary[]>;
@@ -309,6 +322,23 @@ export function parsePetWindowSize(value: unknown): number {
     );
   }
   return value as number;
+}
+
+export function parsePetWindowDragEvent(value: unknown): PetWindowDragEvent {
+  if (
+    !isRecord(value) ||
+    !PET_WINDOW_DRAG_PHASES.includes(value.phase as PetWindowDragPhase) ||
+    !Number.isSafeInteger(value.screenX) ||
+    !Number.isSafeInteger(value.screenY)
+  ) {
+    throw new Error("Malformed pet window drag event.");
+  }
+
+  return {
+    phase: value.phase as PetWindowDragPhase,
+    screenX: value.screenX as number,
+    screenY: value.screenY as number,
+  };
 }
 
 export function parsePetWindowPreferences(

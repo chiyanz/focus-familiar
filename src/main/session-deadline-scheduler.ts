@@ -9,11 +9,20 @@ import type { Clock } from "../platform/application";
 export const DEFAULT_MAX_DELAY_MS = 2_147_483_647;
 
 /**
+ * While intervention is active there is no further phase boundary, but the
+ * main process still needs to advance the reducer so away time and renderer
+ * snapshots stay current. Keeping this interval explicit makes the refresh
+ * cadence deterministic and easy to cover with fake timers.
+ */
+export const INTERVENTION_HEARTBEAT_MS = 15_000;
+
+/**
  * The time remaining until the next reducer boundary.
  *
  * `null` means that the current phase has no deadline. This helper is pure:
  * the timestamp at which the deadline occurs is derived separately from the
- * state's `lastEventAtMs` value.
+ * state's `lastEventAtMs` value. Intervention uses a recurring heartbeat in
+ * place of a one-shot phase deadline so prolonged-away state remains fresh.
  */
 export function getNextDeadlineDelayMs(
   state: FocusSessionState,
@@ -28,8 +37,9 @@ export function getNextDeadlineDelayMs(
       return remainingMs(config.gracePeriodMs, state.currentAwayMs);
     case "nudge":
       return remainingMs(config.interventionAfterMs, state.currentAwayMs);
-    case "idle":
     case "intervention":
+      return INTERVENTION_HEARTBEAT_MS;
+    case "idle":
     case "paused":
     case "completed":
     case "stopped":

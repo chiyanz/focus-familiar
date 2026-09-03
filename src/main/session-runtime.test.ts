@@ -198,6 +198,53 @@ describe("session runtime", () => {
     expect(states).toEqual(["grace", "nudge", "intervention", "focused"]);
   });
 
+  it("keeps prolonged intervention snapshots fresh on a recurring heartbeat", async () => {
+    const provider = new FakeActivityProvider();
+    provider.current = browser;
+    const activator = new FakeActivator();
+    const clock = new FakeClock();
+    const timer = new FakeTimer();
+    const runtime = new SessionRuntime(provider, activator, clock, timer);
+    runtime.startMonitoring();
+
+    await runtime.startSession("session-1", strictConfig);
+    expect(runtime.snapshot().phase).toBe("grace");
+
+    clock.value = 1_000;
+    timer.fire(0);
+    expect(runtime.snapshot()).toMatchObject({
+      phase: "nudge",
+      currentAwayMs: 1_000,
+      lastEventAtMs: 1_000,
+    });
+
+    clock.value = 3_000;
+    timer.fire(1);
+    expect(runtime.snapshot()).toMatchObject({
+      phase: "intervention",
+      currentAwayMs: 3_000,
+      lastEventAtMs: 3_000,
+    });
+    expect(timer.entries[2]?.delayMs).toBe(15_000);
+    expect(activator.activate).toHaveBeenCalledOnce();
+
+    clock.value = 18_000;
+    timer.fire(2);
+    expect(runtime.snapshot()).toMatchObject({
+      phase: "intervention",
+      currentAwayMs: 18_000,
+      lastEventAtMs: 18_000,
+    });
+    expect(timer.entries[3]?.delayMs).toBe(15_000);
+    expect(activator.activate).toHaveBeenCalledOnce();
+
+    // Repeated delivery of the same host callback cannot create a duplicate
+    // advance or intervention activation.
+    timer.fire(2);
+    expect(runtime.snapshot().lastEventAtMs).toBe(18_000);
+    expect(activator.activate).toHaveBeenCalledOnce();
+  });
+
   it("pauses at the last safe boundary when timer scheduling fails", async () => {
     const provider = new FakeActivityProvider();
     const activator = new FakeActivator();

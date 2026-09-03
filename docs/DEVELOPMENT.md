@@ -56,8 +56,8 @@ This builds, ad-hoc signs, archives, checksums, and launches the packaged Apple
 Silicon app. Outputs are written beneath the ignored `release/` directory:
 
 - `Focus Familiar.app`
-- `focus-familiar-0.1.0-prototype.5-macos-arm64-local-adhoc.zip`
-- `focus-familiar-0.1.0-prototype.5-macos-arm64-local-adhoc.zip.sha256`
+- `focus-familiar-0.1.0-prototype.6-macos-arm64-local-adhoc.zip`
+- `focus-familiar-0.1.0-prototype.6-macos-arm64-local-adhoc.zip.sha256`
 
 Prototype identifiers remain in archive filenames so browsers cannot silently
 reuse an older prototype with the same marketing version.

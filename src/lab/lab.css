@@ -3,9 +3,11 @@
   background: #fff8f1;
   color-scheme: light;
   font-family:
-    Inter,
     ui-rounded,
     "SF Pro Rounded",
+    "SFNSRounded",
+    "Avenir Next Rounded",
+    "Avenir Next",
     -apple-system,
     BlinkMacSystemFont,
     sans-serif;

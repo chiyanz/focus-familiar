@@ -60,7 +60,7 @@ Keychain files must never be committed.
 ## Local-only prototype builds
 
 `npm run prototype` remains available without an Apple account. Its archive is
-explicitly named `focus-familiar-0.1.0-prototype.5-macos-arm64-local-adhoc.zip` so it cannot
+explicitly named `focus-familiar-0.1.0-prototype.6-macos-arm64-local-adhoc.zip` so it cannot
 be mistaken for a notarized public release. A downloaded ad-hoc build will
 still trigger Gatekeeper; use the verified fallback in the install guide only
 for a build you trust.

@@ -213,6 +213,7 @@ describe("session IPC handlers", () => {
     const setPetWindowSize = vi.fn(async (sizePx: number) => {
       petWindowSize = sizePx;
     });
+    const movePetWindow = vi.fn();
     const removeHandler = vi.fn();
     const acknowledgePreferencesFlush = vi.fn();
     let updateStatus: UpdateStatus = {
@@ -270,6 +271,7 @@ describe("session IPC handlers", () => {
       }),
       getPetWindowSize: () => petWindowSize,
       setPetWindowSize,
+      movePetWindow,
       acknowledgePreferencesFlush,
       createSessionId: () => "generated-session",
     });
@@ -303,6 +305,18 @@ describe("session IPC handlers", () => {
       handlers.get("settings:set-pet-window-size")?.(event, 320),
     ).resolves.toEqual({ sizePx: 320 });
     expect(setPetWindowSize).toHaveBeenCalledWith(320);
+    expect(
+      handlers.get("window:pet-drag")?.(event, {
+        phase: "move",
+        screenX: 120,
+        screenY: 240,
+      }),
+    ).toBeUndefined();
+    expect(movePetWindow).toHaveBeenCalledWith(entry.window, {
+      phase: "move",
+      screenX: 120,
+      screenY: 240,
+    });
     await expect(
       handlers.get("session:start")?.(event, config),
     ).resolves.toMatchObject({ phase: "focused" });
@@ -336,7 +350,7 @@ describe("session IPC handlers", () => {
     expect(acknowledgePreferencesFlush).toHaveBeenCalledWith("request-1");
 
     dispose();
-    expect(removeHandler).toHaveBeenCalledTimes(14);
+    expect(removeHandler).toHaveBeenCalledTimes(15);
   });
 
   it("rejects session operations when the macOS service is unavailable", async () => {
@@ -364,6 +378,7 @@ describe("session IPC handlers", () => {
       setPetWindowSize: async () => {
         throw new Error("Pet window preferences are unavailable.");
       },
+      movePetWindow: vi.fn(),
       acknowledgePreferencesFlush: vi.fn(),
       createSessionId: () => "unused",
     });

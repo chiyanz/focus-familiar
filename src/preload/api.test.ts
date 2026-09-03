@@ -84,6 +84,7 @@ describe("preload API", () => {
       "openUpdateRelease",
       "onUpdateStatusChanged",
       "requestWindowAction",
+      "dragPetWindow",
       "getPetWindowPreferences",
       "setPetWindowSize",
       "listApplications",
@@ -181,6 +182,21 @@ describe("preload API", () => {
     expect(invoke).toHaveBeenNthCalledWith(12, "updates:check");
     expect(invoke).toHaveBeenNthCalledWith(13, "updates:open-release");
     expect(on).not.toHaveBeenCalled();
+  });
+
+  it("validates drag coordinates before sending them to the main process", async () => {
+    const invoke = vi.fn<PreloadInvoker["invoke"]>(async () => undefined);
+    const api = createPreloadApi({ invoke, on: () => () => undefined });
+
+    await api.dragPetWindow({ phase: "start", screenX: -40, screenY: 220 });
+    expect(invoke).toHaveBeenCalledWith("window:pet-drag", {
+      phase: "start",
+      screenX: -40,
+      screenY: 220,
+    });
+    await expect(
+      api.dragPetWindow({ phase: "move", screenX: 1.5, screenY: 2 }),
+    ).rejects.toThrow("Malformed pet window drag event");
   });
 
   it("rejects runtime values that are outside the action contract", async () => {

@@ -9,6 +9,7 @@ import {
   canPlayPetHoverAction,
   choosePetHoverAction,
   getPetPresentation,
+  getPetSnapshotStatus,
   PET_ASSET_PATHS,
   PET_HOVER_ACTIONS,
   PET_PRESENTATIONS,
@@ -57,30 +58,13 @@ describe("pet presentation", () => {
     }
   });
 
-  it("uses the locked reaction stills for grace and nudge", () => {
-    expect(getPetPresentation("grace")).toMatchObject({
-      timeline: [{ asset: PET_ASSET_PATHS.graceGlance, durationMs: null }],
-      mode: "still",
-      provisional: false,
-    });
-    expect(getPetPresentation("nudge")).toMatchObject({
-      timeline: [{ asset: PET_ASSET_PATHS.nudgeStare, durationMs: null }],
-      mode: "still",
-      provisional: false,
-    });
-  });
-
-  it("marks intervention and completed art as provisional", () => {
-    expect(getPetPresentation("intervention")).toMatchObject({
-      timeline: [{ asset: PET_ASSET_PATHS.interventionWait, durationMs: null }],
-      mode: "still",
-      provisional: true,
-    });
-    expect(getPetPresentation("completed")).toMatchObject({
-      timeline: [{ asset: PET_ASSET_PATHS.forwardStretch, durationMs: null }],
-      mode: "still",
-      provisional: true,
-    });
+  it("holds one baseline-stable loaf through phase changes", () => {
+    for (const phase of SESSION_PHASES) {
+      expect(getPetPresentation(phase)).toMatchObject({
+        timeline: [{ asset: PET_ASSET_PATHS.idleNeutral, durationMs: null }],
+        provisional: false,
+      });
+    }
   });
 
   it("collapses idle and focused loops to one frame for reduced motion", () => {
@@ -142,5 +126,56 @@ describe("pet presentation", () => {
         expect(reactionAssets.has(step.asset)).toBe(false);
       }
     }
+  });
+
+  it("strengthens intervention copy and attention without changing policy", () => {
+    const base = {
+      schemaVersion: 1 as const,
+      sessionId: "session-1",
+      phase: "intervention" as const,
+      task: "Ship",
+      targetApplication: { bundleId: "com.example.Editor", name: "Editor" },
+      durationMs: 60_000,
+      gracePeriodMs: 1_000,
+      interventionAfterMs: 5_000,
+      intensity: "balanced" as const,
+      focusedMs: 0,
+      awayMs: 5_000,
+      currentAwayMs: 5_000,
+      capabilities: {
+        canStart: false,
+        canPause: true,
+        canResume: false,
+        canStop: true,
+      },
+    };
+
+    expect(getPetSnapshotStatus(base)).toMatchObject({
+      statusText: "Time to return to Editor",
+      attentionLevel: 1,
+      reminderBeat: 0,
+    });
+    expect(
+      getPetSnapshotStatus({
+        ...base,
+        awayMs: 35_000,
+        currentAwayMs: 35_000,
+      }),
+    ).toMatchObject({
+      statusText: "Editor is waiting",
+      attentionLevel: 2,
+      reminderBeat: 2,
+    });
+    expect(
+      getPetSnapshotStatus({
+        ...base,
+        awayMs: 65_000,
+        currentAwayMs: 65_000,
+      }),
+    ).toMatchObject({
+      statusText: "Let’s return to Editor",
+      attentionLevel: 3,
+      reminderBeat: 4,
+    });
   });
 });

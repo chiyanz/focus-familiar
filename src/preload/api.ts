@@ -5,6 +5,7 @@ import {
   parseAppInfo,
   parseApplicationList,
   parsePetWindowPreferences,
+  parsePetWindowDragEvent,
   parsePetWindowSize,
   parseSessionAction,
   parseSessionPreferences,
@@ -61,6 +62,12 @@ export function createPreloadApi(invoker: PreloadInvoker): FocusFamiliarApi {
       }
 
       await invoker.invoke(IPC_CHANNELS.windowAction, action);
+    },
+    dragPetWindow: async (event): Promise<void> => {
+      await invoker.invoke(
+        IPC_CHANNELS.petWindowDrag,
+        parsePetWindowDragEvent(event),
+      );
     },
     getPetWindowPreferences: async (): Promise<PetWindowPreferences> => {
       const response = await invoker.invoke(

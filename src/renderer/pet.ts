@@ -1,4 +1,3 @@
-import idleForwardStretchUrl from "./assets/shokupan-cat/idle-actions/idle-05-forward-stretch.png";
 import idleCloseUrl from "./assets/shokupan-cat/idle-loop/loop-08-close.png";
 import idleEarTwitchUrl from "./assets/shokupan-cat/idle-loop/loop-06-ear-twitch.png";
 import idleEarTurnUrl from "./assets/shokupan-cat/idle-loop/loop-05-ear-turn.png";
@@ -7,16 +6,14 @@ import idleInhalePeakUrl from "./assets/shokupan-cat/idle-loop/loop-03-inhale-pe
 import idleInhaleStartUrl from "./assets/shokupan-cat/idle-loop/loop-02-inhale-start.png";
 import idleNeutralUrl from "./assets/shokupan-cat/idle-loop/loop-01-neutral.png";
 import idleSettleUrl from "./assets/shokupan-cat/idle-loop/loop-07-settle.png";
-import graceGlanceUrl from "./assets/shokupan-cat/reactions/reaction-01-grace-glance.png";
-import interventionWaitUrl from "./assets/shokupan-cat/reactions/reaction-06-polite-wait.png";
-import nudgeStareUrl from "./assets/shokupan-cat/reactions/reaction-03-half-lens-stare.png";
 
-import type { SessionPhase } from "../shared/ipc";
+import type { SessionPhase, SessionSnapshot } from "../shared/ipc";
 import { startPetAnimation } from "./pet-animation";
 import {
   canPlayPetHoverAction,
   choosePetHoverAction,
   getPetPresentation,
+  getPetSnapshotStatus,
   PET_ASSET_PATHS,
   type PetAssetPath,
   type PetHoverAction,
@@ -27,6 +24,7 @@ const sessionApi = window.focusFamiliar;
 
 const petShell = document.querySelector<HTMLElement>(".pet-shell");
 const petAvatar = document.querySelector<HTMLElement>("#pet-avatar");
+const petVisual = document.querySelector<HTMLElement>("#pet-visual");
 const petImage = document.querySelector<HTMLImageElement>("#pet-image");
 const petHint = document.querySelector<HTMLElement>("#pet-hint");
 const settingsButton =
@@ -35,7 +33,7 @@ const reducedMotionQuery = window.matchMedia(
   "(prefers-reduced-motion: reduce)",
 );
 
-const petAssetUrls: Record<PetAssetPath, string> = {
+const petAssetUrls: Partial<Record<PetAssetPath, string>> = {
   [PET_ASSET_PATHS.idleNeutral]: idleNeutralUrl,
   [PET_ASSET_PATHS.idleInhaleStart]: idleInhaleStartUrl,
   [PET_ASSET_PATHS.idleInhalePeak]: idleInhalePeakUrl,
@@ -44,10 +42,6 @@ const petAssetUrls: Record<PetAssetPath, string> = {
   [PET_ASSET_PATHS.idleEarTwitch]: idleEarTwitchUrl,
   [PET_ASSET_PATHS.idleSettle]: idleSettleUrl,
   [PET_ASSET_PATHS.idleClose]: idleCloseUrl,
-  [PET_ASSET_PATHS.graceGlance]: graceGlanceUrl,
-  [PET_ASSET_PATHS.nudgeStare]: nudgeStareUrl,
-  [PET_ASSET_PATHS.interventionWait]: interventionWaitUrl,
-  [PET_ASSET_PATHS.forwardStretch]: idleForwardStretchUrl,
 };
 
 // Decode the local hover frames before the first reaction so a cold image load
@@ -62,7 +56,7 @@ const hoverAssetsReady = Promise.allSettled(
   ].map(async (asset) => {
     const preload = new Image();
     preload.decoding = "async";
-    preload.src = petAssetUrls[asset];
+    preload.src = petAssetUrl(asset);
     await preload.decode();
   }),
 );
@@ -73,9 +67,25 @@ let stopAnimation: (() => void) | undefined;
 let currentHoverAction: PetHoverAction | undefined;
 let previousHoverActionId: PetHoverAction["id"] | undefined;
 let pointerInsideAvatar = false;
+let pointerInsideHint = false;
+let forcedHintTimer: number | undefined;
+let collapseHintTimer: number | undefined;
+let currentSnapshot: SessionSnapshot | undefined;
+let previousReminderBeat = -1;
+let isDraggingPet = false;
+let queuedDragPosition:
+  | { readonly screenX: number; readonly screenY: number }
+  | undefined;
+let dragFrame: number | undefined;
 
 function showPetAsset(asset: PetAssetPath): void {
-  if (petImage) petImage.src = petAssetUrls[asset];
+  if (petImage) petImage.src = petAssetUrl(asset);
+}
+
+function petAssetUrl(asset: PetAssetPath): string {
+  const url = petAssetUrls[asset];
+  if (!url) throw new Error(`Pet asset is not bundled: ${asset}`);
+  return url;
 }
 
 function renderCurrentPhasePresentation(): void {
@@ -89,7 +99,11 @@ function renderCurrentPhasePresentation(): void {
     petShell.dataset.reducedMotion = String(reducedMotion);
     delete petShell.dataset.petAction;
   }
-  if (petHint) petHint.textContent = presentation.statusText;
+  if (petHint) {
+    petHint.textContent = currentSnapshot
+      ? getPetSnapshotStatus(currentSnapshot).statusText
+      : presentation.statusText;
+  }
 
   currentHoverAction = undefined;
   stopPetAnimation();
@@ -116,6 +130,25 @@ export function renderPetPhase(
   currentPhase = phase;
   currentReducedMotion = reducedMotion;
   renderCurrentPhasePresentation();
+}
+
+function renderPetSnapshot(snapshot: SessionSnapshot): void {
+  currentSnapshot = snapshot;
+  renderPetPhase(snapshot.phase);
+  const status = getPetSnapshotStatus(snapshot);
+  if (petHint) petHint.textContent = status.statusText;
+  if (petShell) petShell.dataset.petAttention = String(status.attentionLevel);
+
+  const isFreshReminder =
+    snapshot.phase === "intervention" &&
+    status.reminderBeat !== previousReminderBeat;
+  previousReminderBeat =
+    snapshot.phase === "intervention" ? status.reminderBeat : -1;
+
+  if (snapshot.phase === "nudge" || isFreshReminder) {
+    revealHintTemporarily(snapshot.phase === "nudge" ? 3_000 : 4_500);
+  }
+  if (isFreshReminder && !reducedMotionQuery.matches) playAttentionPop();
 }
 
 function stopPetAnimation(): void {
@@ -161,11 +194,84 @@ settingsButton?.addEventListener("click", () => {
 
 petAvatar?.addEventListener("mouseenter", () => {
   pointerInsideAvatar = true;
+  updateHintVisibility();
   void playRandomHoverAction();
 });
 petAvatar?.addEventListener("mouseleave", () => {
   pointerInsideAvatar = false;
+  scheduleHintCollapse();
 });
+
+settingsButton?.addEventListener("mouseenter", () => {
+  pointerInsideHint = true;
+  updateHintVisibility();
+});
+settingsButton?.addEventListener("mouseleave", () => {
+  pointerInsideHint = false;
+  scheduleHintCollapse();
+});
+
+petAvatar?.addEventListener("mousedown", (event) => {
+  if (event.button !== 0 || isDraggingPet) return;
+  event.preventDefault();
+  isDraggingPet = true;
+  petAvatar.dataset.dragging = "true";
+  const position = petDragPosition(event);
+  void sessionApi
+    .dragPetWindow({
+      phase: "start",
+      ...position,
+    })
+    .catch(() => undefined);
+});
+
+window.addEventListener("mousemove", (event) => {
+  if (!isDraggingPet) return;
+  queuedDragPosition = petDragPosition(event);
+  if (dragFrame !== undefined) return;
+  dragFrame = window.requestAnimationFrame(() => {
+    dragFrame = undefined;
+    const position = queuedDragPosition;
+    queuedDragPosition = undefined;
+    if (!position || !isDraggingPet) return;
+    void sessionApi
+      .dragPetWindow({ phase: "move", ...position })
+      .catch(() => undefined);
+  });
+});
+
+function endPetDrag(event: MouseEvent): void {
+  if (!isDraggingPet) return;
+  const finalPosition = queuedDragPosition ?? {
+    ...petDragPosition(event),
+  };
+  isDraggingPet = false;
+  delete petAvatar?.dataset.dragging;
+  if (dragFrame !== undefined) {
+    window.cancelAnimationFrame(dragFrame);
+    dragFrame = undefined;
+  }
+  queuedDragPosition = undefined;
+  void sessionApi
+    .dragPetWindow({ phase: "move", ...finalPosition })
+    .then(() => sessionApi.dragPetWindow({ phase: "end", ...finalPosition }))
+    .catch(() => undefined);
+}
+
+window.addEventListener("mouseup", endPetDrag);
+
+function petDragPosition(event: MouseEvent): {
+  readonly screenX: number;
+  readonly screenY: number;
+} {
+  // Chromium's screen coordinates are not populated for every injected or
+  // accessibility input source. Window origin + client coordinates is the
+  // same logical screen-space value and works consistently on macOS.
+  return {
+    screenX: Math.round(window.screenX + event.clientX),
+    screenY: Math.round(window.screenY + event.clientY),
+  };
+}
 
 reducedMotionQuery.addEventListener("change", () => {
   renderPetPhase(currentPhase ?? "idle", reducedMotionQuery.matches);
@@ -180,12 +286,12 @@ renderPetPhase("idle");
  */
 let unsubscribeFromSession: (() => void) | undefined;
 try {
-  unsubscribeFromSession = sessionApi.onSessionChanged(({ phase }) => {
-    renderPetPhase(phase);
+  unsubscribeFromSession = sessionApi.onSessionChanged((snapshot) => {
+    renderPetSnapshot(snapshot);
   });
   void sessionApi
     .getSessionSnapshot()
-    .then(({ phase }) => renderPetPhase(phase))
+    .then(renderPetSnapshot)
     .catch(() => {
       if (petHint) petHint.textContent = "Ready when you are";
     });
@@ -224,4 +330,44 @@ window.addEventListener("beforeunload", () => {
   unsubscribeFromSession?.();
   unsubscribeFromUpdateStatus?.();
   stopPetAnimation();
+  if (forcedHintTimer !== undefined) window.clearTimeout(forcedHintTimer);
+  if (collapseHintTimer !== undefined) window.clearTimeout(collapseHintTimer);
+  if (dragFrame !== undefined) window.cancelAnimationFrame(dragFrame);
 });
+
+function revealHintTemporarily(durationMs: number): void {
+  if (forcedHintTimer !== undefined) window.clearTimeout(forcedHintTimer);
+  if (collapseHintTimer !== undefined) window.clearTimeout(collapseHintTimer);
+  if (petShell) petShell.dataset.hintVisible = "true";
+  forcedHintTimer = window.setTimeout(() => {
+    forcedHintTimer = undefined;
+    updateHintVisibility();
+  }, durationMs);
+}
+
+function scheduleHintCollapse(): void {
+  if (collapseHintTimer !== undefined) window.clearTimeout(collapseHintTimer);
+  collapseHintTimer = window.setTimeout(() => {
+    collapseHintTimer = undefined;
+    updateHintVisibility();
+  }, 180);
+}
+
+function updateHintVisibility(): void {
+  if (collapseHintTimer !== undefined) {
+    window.clearTimeout(collapseHintTimer);
+    collapseHintTimer = undefined;
+  }
+  if (!petShell) return;
+  petShell.dataset.hintVisible = String(
+    pointerInsideAvatar || pointerInsideHint || forcedHintTimer !== undefined,
+  );
+}
+
+function playAttentionPop(): void {
+  if (!petVisual) return;
+  petVisual.classList.remove("attention-pop");
+  void petVisual.offsetWidth;
+  petVisual.classList.add("attention-pop");
+  window.setTimeout(() => petVisual.classList.remove("attention-pop"), 700);
+}

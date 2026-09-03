@@ -40,19 +40,28 @@ Leaving the target application triggers predictable, progressively stronger, and
 
 ## Implementation notes
 
-The nonvisual runtime foundation is in progress. It schedules one-shot callbacks for the next focus, grace, or intervention boundary rather than polling, and it keeps timing behind injected interfaces for deterministic tests.
+The nonvisual runtime foundation is in progress. It schedules one-shot callbacks
+for the next focus, grace, or intervention boundary rather than polling, and it
+keeps timing behind injected interfaces for deterministic tests. Once a session
+is in intervention, a low-frequency 15-second heartbeat advances authoritative
+away time and refreshes presentation. Only one heartbeat timer exists at once;
+returning, pausing, stopping, or disposal cancels it.
 
 Strict mode treats entry into the intervention phase as a reversible request for macOS to activate the configured target application. Gentle and balanced modes never activate an application automatically. Repeated state delivery cannot issue repeated requests, returning to focus rearms the next away interval, and restoration into an already-intervening state has no side effect. This is intentionally friction rather than an unbreakable lock: macOS or the user may decline or immediately override activation.
 
 Automated tests cover every schedulable phase, exact and delayed boundaries, long-timer chunking, stale callback cancellation, timer failure, sleep, duplicate intervention states, activation failure, disposal, and late asynchronous results after return, pause, stop, completion, or a newer away episode.
 
 The approved Shokupan-cat presentation is now connected to live focus phases.
-The settings window shows concise state-specific copy and focused-time progress,
+Grace and nudge copy is concise. Intervention reminders briefly reveal the
+otherwise collapsed pet text, repeat on the heartbeat, and grow through three
+bounded visual attention levels without changing the window or sprite bounds.
+Reduced-motion mode suppresses the pop and growth. The settings window shows concise state-specific copy and focused-time progress,
 including a display-only clock between authoritative runtime events. Pause,
 resume, stop, and quit remain visible and never close another application. The
 typed preload projection deliberately excludes the current non-target app and
 all raw operating-system events.
 
-Still pending are a visible intervention countdown, a manual “return now”
-button, transient returned-to-focus acknowledgement, and supported-Mac manual
-checks of the full escalation experience.
+The settings control now states the actual difference between visual reminders
+and strict mode's one-time activation request. Still pending are a manual
+“return now” button, transient returned-to-focus acknowledgement, and
+supported-Mac manual checks of the full escalation experience.
