@@ -1,20 +1,55 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { assertTrustedSender, type ManagedWindow } from "./ipc";
+import {
+  createIdleSession,
+  reduceSession,
+  type FocusSessionConfig,
+  type FocusSessionState,
+} from "../core";
+import {
+  assertTrustedSender,
+  publishSessionSnapshot,
+  registerIpcHandlers,
+  toSessionSnapshot,
+  type ManagedWindow,
+} from "./ipc";
+
+const editor = { bundleId: "com.example.Editor", name: "Editor" };
+const browser = { bundleId: "com.example.Browser", name: "Browser" };
+const config: FocusSessionConfig = {
+  task: "Ship the prototype",
+  targetApplication: editor,
+  durationMs: 25 * 60 * 1_000,
+  gracePeriodMs: 10_000,
+  interventionAfterMs: 60_000,
+  intensity: "balanced",
+};
 
 function managedWindow(
   url = "file:///app/out/renderer/pet.html",
 ): ManagedWindow {
-  const webContents = { getURL: () => url };
+  const webContents = { getURL: () => url, send: vi.fn() };
   return {
     kind: "pet",
-    window: { webContents } as never,
+    window: { webContents, isDestroyed: () => false } as never,
     target: {
       kind: "file",
       filePath: "/app/out/renderer/pet.html",
       url: "file:///app/out/renderer/pet.html",
     },
   };
+}
+
+function runningState(): FocusSessionState {
+  const started = reduceSession(createIdleSession(), {
+    type: "session-started",
+    atMs: 100,
+    sessionId: "session-1",
+    config,
+    currentApplication: browser,
+  });
+  if (!started.ok) throw new Error(started.error.message);
+  return started.state;
 }
 
 describe("IPC sender boundary", () => {
@@ -55,5 +90,174 @@ describe("IPC sender boundary", () => {
         [entry],
       ),
     ).toThrow("untrusted renderer");
+  });
+});
+
+describe("session IPC projection", () => {
+  it("never exposes the current non-target application or event timestamps", () => {
+    const snapshot = toSessionSnapshot(runningState());
+
+    expect(snapshot).toMatchObject({
+      sessionId: "session-1",
+      phase: "grace",
+      task: config.task,
+      targetApplication: editor,
+      capabilities: {
+        canStart: false,
+        canPause: true,
+        canResume: false,
+        canStop: true,
+      },
+    });
+    expect(snapshot).not.toHaveProperty("currentApplication");
+    expect(snapshot).not.toHaveProperty("lastEventAtMs");
+    expect(snapshot).not.toHaveProperty("endedAtMs");
+  });
+
+  it("broadcasts the same sanitized snapshot to managed windows", () => {
+    const first = managedWindow();
+    const second = managedWindow("file:///app/out/renderer/settings.html");
+
+    publishSessionSnapshot([first, second], runningState());
+
+    for (const entry of [first, second]) {
+      expect(entry.window.webContents.send).toHaveBeenCalledWith(
+        "session:changed",
+        expect.objectContaining({ phase: "grace" }),
+      );
+      const payload = vi.mocked(entry.window.webContents.send).mock
+        .calls[0]?.[1];
+      expect(payload).not.toHaveProperty("currentApplication");
+    }
+  });
+});
+
+describe("session IPC handlers", () => {
+  it("lists apps and drives start, pause, resume, stop through the runtime", async () => {
+    const entry = managedWindow();
+    const handlers = new Map<
+      string,
+      (event: never, payload?: unknown) => unknown
+    >();
+    let state = createIdleSession();
+    const startSession = vi.fn(async (sessionId: string) => {
+      const result = reduceSession(state, {
+        type: "session-started",
+        atMs: 100,
+        sessionId,
+        config,
+        currentApplication: editor,
+      });
+      if (result.ok) state = result.state;
+      return result;
+    });
+    const pause = vi.fn(() => {
+      const result = reduceSession(state, {
+        type: "session-paused",
+        atMs: 200,
+      });
+      if (result.ok) state = result.state;
+      return result;
+    });
+    const resume = vi.fn(async () => {
+      const result = reduceSession(state, {
+        type: "session-resumed",
+        atMs: 300,
+        currentApplication: editor,
+      });
+      if (result.ok) state = result.state;
+      return result;
+    });
+    const stop = vi.fn(() => {
+      const result = reduceSession(state, {
+        type: "session-stopped",
+        atMs: 400,
+        reason: "user",
+      });
+      if (result.ok) state = result.state;
+      return result;
+    });
+    const removeHandler = vi.fn();
+    const dispose = registerIpcHandlers({
+      app: {
+        getName: () => "Focus Familiar",
+        getVersion: () => "0.1.0",
+        quit: vi.fn(),
+      },
+      ipcMain: {
+        handle: vi.fn((channel, handler) => handlers.set(channel, handler)),
+        removeHandler,
+      } as never,
+      getWindows: () => [entry],
+      getApplicationProvider: () => ({
+        listApplications: async () => ({
+          ok: true as const,
+          value: [editor, browser],
+        }),
+      }),
+      getSessionController: () => ({
+        snapshot: () => state,
+        startSession: async (sessionId) => startSession(sessionId),
+        pause,
+        resume,
+        stop,
+      }),
+      createSessionId: () => "generated-session",
+    });
+    const event = {
+      sender: entry.window.webContents,
+      senderFrame: { url: entry.target.url },
+    } as never;
+
+    await expect(handlers.get("applications:list")?.(event)).resolves.toEqual([
+      editor,
+      browser,
+    ]);
+    await expect(
+      handlers.get("session:start")?.(event, config),
+    ).resolves.toMatchObject({ phase: "focused" });
+    expect(startSession).toHaveBeenCalledWith("generated-session");
+
+    await expect(
+      handlers.get("session:action")?.(event, "pause"),
+    ).resolves.toMatchObject({ phase: "paused" });
+    await expect(
+      handlers.get("session:action")?.(event, "resume"),
+    ).resolves.toMatchObject({ phase: "focused" });
+    await expect(
+      handlers.get("session:action")?.(event, "stop"),
+    ).resolves.toMatchObject({ phase: "stopped" });
+
+    dispose();
+    expect(removeHandler).toHaveBeenCalledTimes(6);
+  });
+
+  it("rejects session operations when the macOS service is unavailable", async () => {
+    const entry = managedWindow();
+    const handlers = new Map<
+      string,
+      (event: never, payload?: unknown) => unknown
+    >();
+    registerIpcHandlers({
+      app: {
+        getName: () => "Focus Familiar",
+        getVersion: () => "0.1.0",
+        quit: vi.fn(),
+      },
+      ipcMain: {
+        handle: vi.fn((channel, handler) => handlers.set(channel, handler)),
+        removeHandler: vi.fn(),
+      } as never,
+      getWindows: () => [entry],
+      getApplicationProvider: () => undefined,
+      getSessionController: () => undefined,
+      createSessionId: () => "unused",
+    });
+    const event = {
+      sender: entry.window.webContents,
+      senderFrame: { url: entry.target.url },
+    } as never;
+
+    expect(() => handlers.get("session:get")?.(event)).toThrow("unavailable");
   });
 });

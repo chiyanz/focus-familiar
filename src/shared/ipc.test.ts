@@ -2,9 +2,17 @@ import { describe, expect, it } from "vitest";
 
 import {
   IPC_CHANNELS,
+  IPC_EVENTS,
+  SESSION_ACTIONS,
+  SESSION_INTENSITIES,
+  SESSION_PHASES,
   WINDOW_ACTIONS,
+  parseApplicationList,
   isWindowAction,
   parseAppInfo,
+  parseSessionAction,
+  parseSessionSnapshot,
+  parseSessionStartConfig,
   parseWindowAction,
   toAppPlatform,
 } from "./ipc";
@@ -14,13 +22,30 @@ describe("IPC contracts", () => {
     expect(IPC_CHANNELS).toEqual({
       getAppInfo: "app:get-info",
       windowAction: "window:action",
+      listApplications: "applications:list",
+      getSessionSnapshot: "session:get",
+      startSession: "session:start",
+      sessionAction: "session:action",
     });
+    expect(IPC_EVENTS).toEqual({ sessionChanged: "session:changed" });
     expect(WINDOW_ACTIONS).toEqual([
       "show-settings",
       "hide-settings",
       "show-pet",
       "quit",
     ]);
+    expect(SESSION_ACTIONS).toEqual(["pause", "resume", "stop"]);
+    expect(SESSION_PHASES).toEqual([
+      "idle",
+      "focused",
+      "grace",
+      "nudge",
+      "intervention",
+      "paused",
+      "completed",
+      "stopped",
+    ]);
+    expect(SESSION_INTENSITIES).toEqual(["gentle", "balanced", "strict"]);
   });
 
   it("accepts only documented window actions", () => {
@@ -50,5 +75,221 @@ describe("IPC contracts", () => {
   it("normalizes unsupported host platforms", () => {
     expect(toAppPlatform("darwin")).toBe("darwin");
     expect(toAppPlatform("freebsd")).toBe("other");
+  });
+
+  it("validates and normalizes session start configuration", () => {
+    expect(
+      parseSessionStartConfig({
+        task: "  Finish the prototype  ",
+        targetApplication: {
+          bundleId: "com.microsoft.VSCode",
+          name: "Visual Studio Code",
+        },
+        durationMs: 25 * 60 * 1000,
+        gracePeriodMs: 20 * 1000,
+        interventionAfterMs: 90 * 1000,
+        intensity: "balanced",
+      }),
+    ).toEqual({
+      task: "Finish the prototype",
+      targetApplication: {
+        bundleId: "com.microsoft.VSCode",
+        name: "Visual Studio Code",
+      },
+      durationMs: 25 * 60 * 1000,
+      gracePeriodMs: 20 * 1000,
+      interventionAfterMs: 90 * 1000,
+      intensity: "balanced",
+    });
+
+    expect(() => parseSessionStartConfig(null)).toThrow(
+      "Configuration must be an object.",
+    );
+    expect(() =>
+      parseSessionStartConfig({
+        task: "",
+        targetApplication: { bundleId: "com.app", name: "App" },
+        durationMs: 1,
+        gracePeriodMs: 0,
+        interventionAfterMs: 1,
+        intensity: "gentle",
+      }),
+    ).toThrow("Task must be a non-empty string.");
+    expect(() =>
+      parseSessionStartConfig({
+        task: "Task",
+        targetApplication: { bundleId: "com.app", name: "App" },
+        durationMs: 1,
+        gracePeriodMs: 100,
+        interventionAfterMs: 100,
+        intensity: "gentle",
+      }),
+    ).toThrow("Intervention threshold must be greater than the grace period.");
+    expect(() =>
+      parseSessionStartConfig({
+        task: "Task",
+        targetApplication: { bundleId: "com.app", name: "App" },
+        durationMs: 1.5,
+        gracePeriodMs: 0,
+        interventionAfterMs: 1,
+        intensity: "gentle",
+      }),
+    ).toThrow("Duration must be a positive integer number of milliseconds.");
+  });
+
+  it("validates application lists and returns fresh summaries", () => {
+    const input = [{ bundleId: "com.apple.Terminal", name: "  Terminal " }];
+    const parsed = parseApplicationList(input);
+    expect(parsed).toEqual([
+      { bundleId: "com.apple.Terminal", name: "Terminal" },
+    ]);
+    expect(parsed[0]).not.toBe(input[0]);
+    expect(() => parseApplicationList({})).toThrow(
+      "Malformed application list.",
+    );
+    expect(() => parseApplicationList([{ bundleId: "com.app" }])).toThrow(
+      "Malformed application list.",
+    );
+  });
+
+  it("accepts only documented session actions", () => {
+    expect(parseSessionAction("pause")).toBe("pause");
+    expect(parseSessionAction("resume")).toBe("resume");
+    expect(parseSessionAction("stop")).toBe("stop");
+    expect(() => parseSessionAction("quit")).toThrow("Unknown session action.");
+    expect(() => parseSessionAction({ action: "pause" })).toThrow(
+      "Unknown session action.",
+    );
+  });
+
+  it("sanitizes session snapshots and strips privileged fields", () => {
+    const snapshot = parseSessionSnapshot({
+      schemaVersion: 1,
+      sessionId: "session-1",
+      phase: "nudge",
+      task: "Build the prototype",
+      targetApplication: {
+        bundleId: "com.microsoft.VSCode",
+        name: "Visual Studio Code",
+      },
+      durationMs: 25 * 60 * 1000,
+      gracePeriodMs: 20 * 1000,
+      interventionAfterMs: 90 * 1000,
+      intensity: "balanced",
+      focusedMs: 12 * 1000,
+      awayMs: 42 * 1000,
+      currentAwayMs: 42 * 1000,
+      capabilities: {
+        canStart: false,
+        canPause: true,
+        canResume: false,
+        canStop: true,
+      },
+      // A compromised/mistaken main response must not cross this boundary.
+      currentApplication: {
+        bundleId: "com.google.Chrome",
+        name: "Google Chrome",
+      },
+      lastEventAtMs: 123456,
+      endedAtMs: null,
+      rawEvent: { type: "application-changed" },
+    });
+
+    expect(snapshot).toEqual({
+      schemaVersion: 1,
+      sessionId: "session-1",
+      phase: "nudge",
+      task: "Build the prototype",
+      targetApplication: {
+        bundleId: "com.microsoft.VSCode",
+        name: "Visual Studio Code",
+      },
+      durationMs: 25 * 60 * 1000,
+      gracePeriodMs: 20 * 1000,
+      interventionAfterMs: 90 * 1000,
+      intensity: "balanced",
+      focusedMs: 12 * 1000,
+      awayMs: 42 * 1000,
+      currentAwayMs: 42 * 1000,
+      capabilities: {
+        canStart: false,
+        canPause: true,
+        canResume: false,
+        canStop: true,
+      },
+    });
+    expect(snapshot).not.toHaveProperty("currentApplication");
+    expect(snapshot).not.toHaveProperty("lastEventAtMs");
+    expect(snapshot).not.toHaveProperty("rawEvent");
+  });
+
+  it("validates snapshot shape, counters, thresholds, and capabilities", () => {
+    const base = {
+      schemaVersion: 1,
+      sessionId: null,
+      phase: "idle",
+      task: null,
+      targetApplication: null,
+      durationMs: null,
+      gracePeriodMs: null,
+      interventionAfterMs: null,
+      intensity: null,
+      focusedMs: 0,
+      awayMs: 0,
+      currentAwayMs: 0,
+      capabilities: {
+        canStart: true,
+        canPause: false,
+        canResume: false,
+        canStop: false,
+      },
+    };
+    expect(parseSessionSnapshot(base)).toEqual(base);
+    expect(() => parseSessionSnapshot({ ...base, phase: "unknown" })).toThrow(
+      "Malformed session snapshot.",
+    );
+    expect(() => parseSessionSnapshot({ ...base, focusedMs: -1 })).toThrow(
+      "Malformed session snapshot.",
+    );
+    expect(() =>
+      parseSessionSnapshot({
+        ...base,
+        durationMs: 10,
+        focusedMs: 11,
+      }),
+    ).toThrow("Malformed session snapshot.");
+    expect(() =>
+      parseSessionSnapshot({
+        ...base,
+        currentAwayMs: 1,
+      }),
+    ).toThrow("Malformed session snapshot.");
+    expect(() =>
+      parseSessionSnapshot({
+        ...base,
+        focusedMs: 1,
+      }),
+    ).toThrow("Malformed session snapshot.");
+    expect(() =>
+      parseSessionSnapshot({
+        ...base,
+        gracePeriodMs: 20,
+        interventionAfterMs: 20,
+      }),
+    ).toThrow("Malformed session snapshot.");
+    expect(() =>
+      parseSessionSnapshot({
+        ...base,
+        sessionId: "session-1",
+        phase: "paused",
+        task: "Task",
+      }),
+    ).toThrow("Malformed session snapshot.");
+    expect(() =>
+      parseSessionSnapshot({
+        ...base,
+        capabilities: { canStart: true },
+      }),
+    ).toThrow("Malformed session snapshot.");
   });
 });

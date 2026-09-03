@@ -63,10 +63,10 @@ export function getWindowOptions(
   }
 
   return {
-    width: 480,
-    height: 420,
+    width: 520,
+    height: 720,
     minWidth: 400,
-    minHeight: 360,
+    minHeight: 560,
     show: false,
     frame: true,
     title: "Focus Familiar settings",

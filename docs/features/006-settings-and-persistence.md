@@ -41,4 +41,14 @@ The nonvisual persistence foundation is in progress. It defines a versioned, run
 
 Recovery intentionally excludes raw foreground-application events and the current non-target application. It retains only the focus contract, accumulated focus/away totals, session identity, and save time, and it always restores as paused so relaunch cannot trigger strict intervention.
 
-The settings form, privacy explanation, reset/delete controls, pet position updates, and launch-at-login integration remain pending with the user-interface work.
+The first functional settings form now lists running macOS applications and
+starts validated sessions with task, duration, target app, intensity, grace,
+and intervention timing controls. It shows live progress and state, exposes
+pause/resume/stop plus a visible quit path, and explains the exact local-only
+foreground-app privacy boundary. The sandboxed renderer communicates through a
+runtime-validated, allow-listed preload API and never receives the current
+non-target application.
+
+Connecting the existing storage foundation to this form, saving safe recovery
+checkpoints, reset/delete controls, pet position updates, motion/sound
+preferences, and launch-at-login integration remain pending.

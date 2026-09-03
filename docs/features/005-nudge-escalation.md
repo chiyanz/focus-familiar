@@ -46,4 +46,13 @@ Strict mode treats entry into the intervention phase as a reversible request for
 
 Automated tests cover every schedulable phase, exact and delayed boundaries, long-timer chunking, stale callback cancellation, timer failure, sleep, duplicate intervention states, activation failure, disposal, and late asynchronous results after return, pause, stop, completion, or a newer away episode.
 
-Pet presentation, reminder copy, the visible countdown, manual return controls, and escape controls remain unimplemented pending the selected visual direction.
+The approved Shokupan-cat presentation is now connected to live focus phases.
+The settings window shows concise state-specific copy and focused-time progress,
+including a display-only clock between authoritative runtime events. Pause,
+resume, stop, and quit remain visible and never close another application. The
+typed preload projection deliberately excludes the current non-target app and
+all raw operating-system events.
+
+Still pending are a visible intervention countdown, a manual “return now”
+button, transient returned-to-focus acknowledgement, and supported-Mac manual
+checks of the full escalation experience.

@@ -249,6 +249,57 @@ describe("session activity bridge", () => {
     expect(onError).toHaveBeenCalledOnce();
   });
 
+  it("starts a distinct session after the previous session has stopped", async () => {
+    const provider = new FakeActivityProvider();
+    const clock = new FakeClock();
+    const bridge = new SessionActivityBridge(provider, clock);
+    await bridge.startSession("session-1", config);
+    clock.value = 100;
+    bridge.stop("user");
+
+    provider.current = { ok: true, value: browser };
+    clock.value = 200;
+    const next = await bridge.startSession("session-2", {
+      ...config,
+      task: "Start again",
+    });
+
+    expect(next).toMatchObject({
+      ok: true,
+      state: {
+        sessionId: "session-2",
+        phase: "grace",
+        focusedMs: 0,
+        awayMs: 0,
+        lastEventAtMs: 200,
+      },
+    });
+  });
+
+  it("keeps an ended snapshot when a subsequent start cannot read the current app", async () => {
+    const provider = new FakeActivityProvider();
+    const clock = new FakeClock();
+    const bridge = new SessionActivityBridge(provider, clock);
+    await bridge.startSession("session-1", config);
+    clock.value = 100;
+    bridge.stop("user");
+    provider.current = {
+      ok: false,
+      error: { code: "no-frontmost-application", message: "No current app." },
+    };
+
+    const next = await bridge.startSession("session-2", config);
+
+    expect(next).toMatchObject({
+      ok: false,
+      state: { sessionId: "session-1", phase: "stopped" },
+    });
+    expect(bridge.snapshot()).toMatchObject({
+      sessionId: "session-1",
+      phase: "stopped",
+    });
+  });
+
   it("ignores an in-flight start result and observer callbacks after disposal", async () => {
     const provider = new FakeActivityProvider();
     let resolveCurrent:

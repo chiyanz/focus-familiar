@@ -3,7 +3,9 @@
 Focus Familiar is a local-first desktop pet for macOS that helps you stay with the application you chose for a focus session. The pet remains calm while you work, notices when you drift, and escalates from a gentle reminder to deliberate friction when a distraction continues.
 
 > [!NOTE]
-> The secure Electron application shell is implemented. Focus behavior is being added in small, reviewable slices.
+> A local macOS prototype can run complete focus sessions from the settings
+> window. Persistence, window-position recovery, and a signed release are still
+> being completed in small, reviewable slices.
 
 ## Version 0.1
 
@@ -47,8 +49,9 @@ Feature plans are living documents. A feature is only marked **Implemented** aft
 | Product direction      | Documented  |
 | Architecture direction | Proposed    |
 | Electron application   | Implemented |
-| Focus features         | In progress |
-| GitHub release         | Planned     |
+| Live focus prototype   | Implemented |
+| Persistence UI         | In progress |
+| Signed GitHub release  | Planned     |
 
 The development baseline requires macOS 13 or newer and Node.js 22.
 

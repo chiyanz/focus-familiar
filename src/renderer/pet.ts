@@ -11,13 +11,15 @@ import graceGlanceUrl from "./assets/shokupan-cat/reactions/reaction-01-grace-gl
 import interventionWaitUrl from "./assets/shokupan-cat/reactions/reaction-06-polite-wait.png";
 import nudgeStareUrl from "./assets/shokupan-cat/reactions/reaction-03-half-lens-stare.png";
 
-import type { SessionPhase } from "../core";
+import type { SessionPhase } from "../shared/ipc";
 import {
   getPetPresentation,
   PET_ASSET_PATHS,
   type PetAssetPath,
 } from "./pet-presentation";
 import "./pet.css";
+
+const sessionApi = window.focusFamiliar;
 
 const petShell = document.querySelector<HTMLElement>(".pet-shell");
 const petImage = document.querySelector<HTMLImageElement>("#pet-image");
@@ -102,3 +104,29 @@ reducedMotionQuery.addEventListener("change", () => {
 });
 
 renderPetPhase("idle");
+
+/**
+ * The pet is a read-only presentation of the sanitized session projection.
+ * It never observes the active application itself and never receives the
+ * current distraction identity.
+ */
+let unsubscribeFromSession: (() => void) | undefined;
+try {
+  unsubscribeFromSession = sessionApi.onSessionChanged(({ phase }) => {
+    renderPetPhase(phase);
+  });
+  void sessionApi
+    .getSessionSnapshot()
+    .then(({ phase }) => renderPetPhase(phase))
+    .catch(() => {
+      if (petHint) petHint.textContent = "Ready when you are.";
+    });
+} catch {
+  // A renderer opened against an older development preload can still show
+  // the idle pet; the settings action remains available for recovery.
+}
+
+window.addEventListener("beforeunload", () => {
+  unsubscribeFromSession?.();
+  stopFrameTimer();
+});
