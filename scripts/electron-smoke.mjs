@@ -39,6 +39,7 @@ if (process.platform === "darwin") {
         soundEnabled: true,
         motionPreference: "system",
         launchAtLogin: false,
+        petWindowSize: 280,
         petWindowPlacement: null,
       },
       recovery: {
@@ -84,7 +85,11 @@ if (process.platform === "darwin") {
     await readFile(join(userDataDirectory, "focus-familiar.json"), "utf8"),
   );
   quitFlushedPreferences =
-    stored?.preferences?.taskDraft === "Flushed during quit";
+    stored?.preferences?.taskDraft === "Flushed during quit" &&
+    stored?.preferences?.petWindowSize === 320 &&
+    Number.isSafeInteger(stored?.preferences?.petWindowPlacement?.x) &&
+    Number.isSafeInteger(stored?.preferences?.petWindowPlacement?.y) &&
+    typeof stored?.preferences?.petWindowPlacement?.displayId === "string";
 }
 await rm(userDataDirectory, { recursive: true, force: true });
 

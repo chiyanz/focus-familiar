@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   DEFAULT_SETTINGS_PREFERENCES,
+  PET_WINDOW_SIZE_DEFAULT,
+  PET_WINDOW_SIZE_MAX,
+  PET_WINDOW_SIZE_MIN,
   SETTINGS_SCHEMA_VERSION,
   createInterruptedSessionRecovery,
   createPausedSessionFromRecovery,
@@ -39,6 +42,7 @@ function validDocument(overrides: Record<string, unknown> = {}): unknown {
       soundEnabled: true,
       motionPreference: "system",
       launchAtLogin: false,
+      petWindowSize: 320,
       petWindowPlacement: { displayId: "main", x: 40, y: 80 },
     },
     recovery: {
@@ -68,6 +72,7 @@ describe("settings defaults", () => {
         soundEnabled: true,
         motionPreference: "system",
         launchAtLogin: false,
+        petWindowSize: 248,
         petWindowPlacement: null,
       },
       recovery: null,
@@ -102,6 +107,7 @@ describe("settings parsing", () => {
         soundEnabled: true,
         motionPreference: "system",
         launchAtLogin: false,
+        petWindowSize: 320,
         petWindowPlacement: {
           displayId: " main ",
           x: 40,
@@ -144,6 +150,7 @@ describe("settings parsing", () => {
         soundEnabled: true,
         motionPreference: "system",
         launchAtLogin: false,
+        petWindowSize: 320,
         petWindowPlacement: { displayId: "main", x: 40, y: 80 },
       },
       recovery: {
@@ -195,11 +202,62 @@ describe("settings parsing", () => {
         soundEnabled: true,
         motionPreference: "system",
         launchAtLogin: false,
+        petWindowSize: 248,
         petWindowPlacement: { displayId: "main", x: 40, y: 80 },
       },
       recovery: null,
     });
   });
+
+  it("uses the default size when a version 1 document predates the field", () => {
+    const input = validDocument() as {
+      preferences: Record<string, unknown>;
+    };
+    delete input.preferences.petWindowSize;
+
+    const result = parseSettings(input);
+
+    expect(result.issues).toEqual([]);
+    expect(result.settings.preferences.petWindowSize).toBe(
+      PET_WINDOW_SIZE_DEFAULT,
+    );
+  });
+
+  it.each([null, "248", 159, 481, 248.5, Number.NaN, Number.POSITIVE_INFINITY])(
+    "uses the default and reports an invalid pet size for %j",
+    (size) => {
+      const input = validDocument() as {
+        preferences: Record<string, unknown>;
+      };
+      input.preferences.petWindowSize = size;
+      const result = parseSettings(input);
+
+      expect(result.settings.preferences.petWindowSize).toBe(
+        PET_WINDOW_SIZE_DEFAULT,
+      );
+      expect(result.issues).toEqual([
+        {
+          code: "invalid-preference-field",
+          message: `Preference petWindowSize must be a whole number from ${PET_WINDOW_SIZE_MIN} to ${PET_WINDOW_SIZE_MAX}; its default was used.`,
+          path: "preferences.petWindowSize",
+        },
+      ]);
+    },
+  );
+
+  it.each([PET_WINDOW_SIZE_MIN, PET_WINDOW_SIZE_DEFAULT, PET_WINDOW_SIZE_MAX])(
+    "accepts the supported pet size boundary %d",
+    (size) => {
+      const input = validDocument() as {
+        preferences: Record<string, unknown>;
+      };
+      input.preferences.petWindowSize = size;
+      const result = parseSettings(input);
+
+      expect(result.issues).toEqual([]);
+      expect(result.settings.preferences.petWindowSize).toBe(size);
+    },
+  );
 
   it("falls back without throwing for an unknown future version", () => {
     const result = parseSettings({
@@ -298,6 +356,7 @@ describe("settings parsing", () => {
         soundEnabled: true,
         motionPreference: "system",
         launchAtLogin: false,
+        petWindowSize: DEFAULT_SETTINGS_PREFERENCES.petWindowSize,
         petWindowPlacement: null,
       }),
     );

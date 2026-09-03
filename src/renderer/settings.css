@@ -429,6 +429,50 @@ progress::-webkit-progress-value {
   margin-top: 9px;
 }
 
+.pet-settings-card {
+  display: grid;
+  padding: 16px 18px;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 0.9fr);
+  align-items: center;
+  gap: 22px;
+  border: 1px solid #f1dcd4;
+  border-radius: 18px;
+  background: rgb(255 255 255 / 70%);
+  box-shadow: 0 10px 30px rgb(109 73 71 / 6%);
+}
+
+.pet-settings-copy .section-kicker {
+  margin-bottom: 5px;
+}
+
+.pet-settings-copy h2 {
+  margin-bottom: 6px;
+}
+
+.pet-size-control {
+  display: grid;
+  gap: 5px;
+}
+
+.pet-size-control output {
+  color: #76556c;
+  font-size: 10px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.pet-size-control input[type="range"] {
+  min-height: 24px;
+  padding: 0;
+  border: 0;
+  accent-color: #9b78b5;
+  background: transparent;
+}
+
+.pet-size-control .save-status {
+  justify-self: end;
+}
+
 .privacy-card {
   display: flex;
   padding: 14px 15px;
@@ -497,6 +541,11 @@ footer {
 
   .session-card {
     padding: 16px;
+  }
+
+  .pet-settings-card {
+    grid-template-columns: 1fr;
+    gap: 14px;
   }
 }
 

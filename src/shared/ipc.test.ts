@@ -10,6 +10,8 @@ import {
   parseApplicationList,
   isWindowAction,
   parseAppInfo,
+  parsePetWindowPreferences,
+  parsePetWindowSize,
   parseSessionAction,
   parsePreferencesFlushRequestId,
   parseSessionPreferences,
@@ -24,6 +26,8 @@ describe("IPC contracts", () => {
     expect(IPC_CHANNELS).toEqual({
       getAppInfo: "app:get-info",
       windowAction: "window:action",
+      getPetWindowPreferences: "settings:get-pet-window-preferences",
+      setPetWindowSize: "settings:set-pet-window-size",
       listApplications: "applications:list",
       getSessionSnapshot: "session:get",
       startSession: "session:start",
@@ -63,6 +67,22 @@ describe("IPC contracts", () => {
     );
     expect(() => parsePreferencesFlushRequestId(42)).toThrow(
       "Malformed preferences flush request.",
+    );
+  });
+
+  it("validates pet window preferences at the IPC boundary", () => {
+    expect(parsePetWindowSize(160)).toBe(160);
+    expect(parsePetWindowSize(248)).toBe(248);
+    expect(parsePetWindowSize(480)).toBe(480);
+    expect(
+      parsePetWindowPreferences({ sizePx: 320, privateField: "remove" }),
+    ).toEqual({ sizePx: 320 });
+
+    for (const value of [159, 481, 248.5, "248", null]) {
+      expect(() => parsePetWindowSize(value)).toThrow("Pet size");
+    }
+    expect(() => parsePetWindowPreferences(null)).toThrow(
+      "Malformed pet window preferences.",
     );
   });
 

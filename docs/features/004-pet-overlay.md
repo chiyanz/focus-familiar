@@ -9,7 +9,8 @@ A small transparent pet window remains visually present without disrupting norma
 ## Scope
 
 - Create a frameless, transparent, always-on-top pet window.
-- Allow dragging and remember the position.
+- Allow dragging the full avatar, remember its position, and offer a bounded
+  size control.
 - Render local Shokupan-cat stills and a calm focused-state animation for core
   focus states.
 - Support click-through behavior when appropriate.
@@ -28,6 +29,8 @@ A small transparent pet window remains visually present without disrupting norma
 - Animation remains smooth during ordinary development work.
 - The overlay does not steal keyboard focus during passive states.
 - The pet remains reachable after display arrangement or resolution changes.
+- The full avatar can be dragged without stealing keyboard focus, and size
+  changes survive a relaunch.
 - Reduced motion replaces looping movement with a calm still or minimal transition.
 
 ## Planned tests
@@ -45,8 +48,12 @@ low-arousal sleeping loop: two slow breaths, an occasional ear twitch, and a
 settle. The data-driven timeline uses per-frame timing instead of a fixed-rate
 slideshow so future pet packs can replace the cadence cleanly. Reduced motion
 collapses the loop to one still frame and does not schedule a timer. The pet
-remains a button that opens settings and subscribes to a sanitized live session
-projection from the main process. The projection contains only the focus
+avatar is the native drag surface; a separate status pill opens settings so
+dragging does not compete with a click action. Its square window scales from
+160 to 480 logical pixels through a settings slider. Size and display-aware
+position are stored locally, resize around the current center, and clamp back
+inside the selected display's work area on relaunch. The pet subscribes to a
+sanitized live session projection from the main process. The projection contains only the focus
 contract, phase, counters, and available controls; current non-target
 application details remain inside the privileged runtime. Automated tests cover
 every phase mapping, timeline timing and cancellation, and bundled asset path;
@@ -59,10 +66,11 @@ on dark desktops without flattening the PNG transparency. The visual lab
 includes a dark-canvas toggle, and the macOS CI job validates every source and
 runtime PNG with the same idempotent edge tool.
 
-Still pending before this feature can be implemented or verified: persisting
-drag position, recovering the pet after display changes, manual
-multi-display/Spaces/full-screen checks on a supported Mac, and final production
-sprite cleanup. The normal settings window provides keyboard-accessible pause,
+Automated coverage includes drag-region separation, bounded geometry,
+off-screen recovery, settings validation, serialized position/size writes, and
+the Electron resize path. Still pending before this feature can be verified:
+manual multi-display, Spaces, and full-screen checks on a supported Mac, plus
+final production sprite cleanup. The normal settings window provides keyboard-accessible pause,
 stop, and quit paths once opened from the pet; a native application-menu route
 remains pending. Intervention and
 completion art are explicitly provisional.

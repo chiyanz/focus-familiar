@@ -1,7 +1,9 @@
 import {
   createDefaultSettings,
   createInterruptedSessionRecovery,
+  parseSettings,
   restorePausedRecovery,
+  type PetWindowPlacement,
   type FocusSessionState,
   type SettingsDocument,
   type SettingsPreferences,
@@ -20,6 +22,12 @@ export type SessionPreferenceUpdate = Pick<
   | "interventionAfterMs"
   | "intensity"
 >;
+
+/** The pet-window preferences needed by the main-process window manager. */
+export interface PetWindowPreferences {
+  readonly petWindowSize: number;
+  readonly petWindowPlacement: PetWindowPlacement | null;
+}
 
 export interface LocalSettingsRepository {
   readonly load: () => Promise<SettingsRepositoryLoadResult>;
@@ -63,6 +71,17 @@ export class LocalSettingsService {
     };
   }
 
+  /** Return a defensive snapshot of the persisted pet-window preferences. */
+  petWindowPreferences(): PetWindowPreferences {
+    const preferences = this.settings.preferences;
+    return {
+      petWindowSize: preferences.petWindowSize,
+      petWindowPlacement: preferences.petWindowPlacement
+        ? { ...preferences.petWindowPlacement }
+        : null,
+    };
+  }
+
   updateSessionPreferences(
     update: SessionPreferenceUpdate,
   ): Promise<SettingsRepositorySaveResult> {
@@ -80,6 +99,43 @@ export class LocalSettingsService {
           gracePeriodMs: update.gracePeriodMs,
           interventionAfterMs: update.interventionAfterMs,
           intensity: update.intensity,
+        },
+      };
+      return this.save(next);
+    });
+  }
+
+  updatePetWindowSize(
+    petWindowSize: number,
+  ): Promise<SettingsRepositorySaveResult> {
+    if (!this.writable) return Promise.resolve(this.readOnlyResult());
+    return this.enqueue(async () => {
+      const next: SettingsDocument = {
+        ...this.settings,
+        preferences: {
+          ...this.settings.preferences,
+          petWindowSize,
+        },
+      };
+      return this.save(next);
+    });
+  }
+
+  updatePetWindowPlacement(
+    petWindowPlacement: PetWindowPlacement | null,
+  ): Promise<SettingsRepositorySaveResult> {
+    if (!this.writable) return Promise.resolve(this.readOnlyResult());
+    const requestedPlacement = petWindowPlacement
+      ? { ...petWindowPlacement }
+      : null;
+    return this.enqueue(async () => {
+      const next: SettingsDocument = {
+        ...this.settings,
+        preferences: {
+          ...this.settings.preferences,
+          petWindowPlacement: requestedPlacement
+            ? { ...requestedPlacement }
+            : null,
         },
       };
       return this.save(next);
@@ -108,7 +164,24 @@ export class LocalSettingsService {
   private async save(
     next: SettingsDocument,
   ): Promise<SettingsRepositorySaveResult> {
-    const result = await this.repository.save(next);
+    // Re-validate before calling the repository so an injected repository (or
+    // a future implementation) cannot persist an invalid pet-window value.
+    // The repository repeats this boundary check before writing to disk.
+    const parsed = parseSettings(next);
+    if (parsed.issues.length > 0) {
+      return {
+        ok: false,
+        settings: this.settings,
+        restoredRecovery: restorePausedRecovery(this.settings.recovery),
+        issues: parsed.issues,
+        error: {
+          code: "settings-validation-failed",
+          message: "Settings were not saved because validation failed.",
+        },
+      };
+    }
+
+    const result = await this.repository.save(parsed.settings);
     if (result.ok) this.settings = result.settings;
     return result;
   }

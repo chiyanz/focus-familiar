@@ -54,6 +54,12 @@ duration, intensity, grace period, and intervention threshold through the
 validated preload boundary. Writes are debounced while editing and serialized
 with recovery writes so simultaneous changes cannot overwrite one another.
 
+The settings window also exposes an always-available pet-size slider. The
+bounded size and display-aware drag position use the same validated local
+document and serialized write queue. Older version 1 files safely receive the
+default size, while malformed or off-screen values fall back or clamp without
+making the pet unreachable.
+
 Active sessions are checkpointed after state changes and immediately before a
 normal quit. Relaunch rebuilds only the minimal session contract and counters,
 always in the paused state with no remembered foreground application. The user
@@ -62,5 +68,5 @@ Electron smoke test seeds an interrupted session, verifies this paused restore,
 changes and reloads preferences, drives the live controls, and confirms a clean
 shutdown.
 
-Reset/delete controls, pet position updates, motion/sound preferences, and
-launch-at-login integration remain pending.
+Reset/delete controls, motion/sound preferences, and launch-at-login
+integration remain pending.

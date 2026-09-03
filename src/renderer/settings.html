@@ -228,6 +228,42 @@
         </form>
       </section>
 
+      <section class="pet-settings-card" aria-labelledby="pet-settings-title">
+        <div class="pet-settings-copy">
+          <p class="section-kicker">Your familiar</p>
+          <h2 id="pet-settings-title">Make the cat feel at home.</h2>
+          <p class="field-hint">
+            Drag the cat itself to move it. Its size and position stay on this
+            Mac.
+          </p>
+        </div>
+        <div class="pet-size-control">
+          <div class="label-row">
+            <label for="pet-size">Pet size</label>
+            <output id="pet-size-value" for="pet-size">Medium · 248 px</output>
+          </div>
+          <input
+            id="pet-size"
+            name="petSize"
+            type="range"
+            min="160"
+            max="480"
+            step="8"
+            value="248"
+          />
+          <span
+            class="save-status"
+            id="pet-size-status"
+            data-save-state="saved"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            Saved locally
+          </span>
+        </div>
+      </section>
+
       <section class="privacy-card" aria-labelledby="privacy-title">
         <span class="privacy-icon" aria-hidden="true">◌</span>
         <div>

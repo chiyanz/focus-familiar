@@ -2,11 +2,24 @@ import { pathToFileURL } from "node:url";
 
 import type { BrowserWindow, BrowserWindowConstructorOptions } from "electron";
 
+import {
+  PET_WINDOW_SIZE_DEFAULT,
+  PET_WINDOW_SIZE_MAX,
+  PET_WINDOW_SIZE_MIN,
+} from "../core/settings";
+
 export type WindowKind = "pet" | "settings";
 
 export interface RendererPaths {
   readonly rendererDirectory: string;
   readonly devServerUrl?: string;
+}
+
+export interface WindowRectangle {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
 }
 
 export type RendererTarget =
@@ -28,6 +41,7 @@ const LOCAL_DEVELOPMENT_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 export function getWindowOptions(
   kind: WindowKind,
   preloadPath: string,
+  petWindowSize = PET_WINDOW_SIZE_DEFAULT,
 ): BrowserWindowConstructorOptions {
   const secureWebPreferences = {
     preload: preloadPath,
@@ -41,13 +55,14 @@ export function getWindowOptions(
   };
 
   if (kind === "pet") {
+    const size = normalizePetWindowSize(petWindowSize);
     return {
-      width: 248,
-      height: 248,
-      minWidth: 160,
-      minHeight: 160,
-      maxWidth: 480,
-      maxHeight: 480,
+      width: size,
+      height: size,
+      minWidth: PET_WINDOW_SIZE_MIN,
+      minHeight: PET_WINDOW_SIZE_MIN,
+      maxWidth: PET_WINDOW_SIZE_MAX,
+      maxHeight: PET_WINDOW_SIZE_MAX,
       show: false,
       frame: false,
       transparent: true,
@@ -74,6 +89,52 @@ export function getWindowOptions(
     resizable: true,
     webPreferences: secureWebPreferences,
   };
+}
+
+/** Keep a square pet window fully reachable inside one display work area. */
+export function clampPetWindowBounds(
+  x: number,
+  y: number,
+  size: number,
+  workArea: WindowRectangle,
+): WindowRectangle {
+  const safeSize = normalizePetWindowSize(size);
+  const maxX = Math.max(workArea.x, workArea.x + workArea.width - safeSize);
+  const maxY = Math.max(workArea.y, workArea.y + workArea.height - safeSize);
+
+  return {
+    x: clampInteger(x, workArea.x, maxX),
+    y: clampInteger(y, workArea.y, maxY),
+    width: safeSize,
+    height: safeSize,
+  };
+}
+
+/** Resize around the pet's current center, then recover it onto the display. */
+export function resizePetWindowBounds(
+  currentBounds: WindowRectangle,
+  size: number,
+  workArea: WindowRectangle,
+): WindowRectangle {
+  const safeSize = normalizePetWindowSize(size);
+  const centeredX =
+    currentBounds.x + Math.round((currentBounds.width - safeSize) / 2);
+  const centeredY =
+    currentBounds.y + Math.round((currentBounds.height - safeSize) / 2);
+  return clampPetWindowBounds(centeredX, centeredY, safeSize, workArea);
+}
+
+function normalizePetWindowSize(size: number): number {
+  return Number.isSafeInteger(size) &&
+    size >= PET_WINDOW_SIZE_MIN &&
+    size <= PET_WINDOW_SIZE_MAX
+    ? size
+    : PET_WINDOW_SIZE_DEFAULT;
+}
+
+function clampInteger(value: number, min: number, max: number): number {
+  const rounded = Number.isFinite(value) ? Math.round(value) : min;
+  return Math.min(max, Math.max(min, rounded));
 }
 
 export function resolveRendererTarget(

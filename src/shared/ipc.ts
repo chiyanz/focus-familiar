@@ -1,6 +1,10 @@
+import { PET_WINDOW_SIZE_MAX, PET_WINDOW_SIZE_MIN } from "../core/settings";
+
 export const IPC_CHANNELS = {
   getAppInfo: "app:get-info",
   windowAction: "window:action",
+  getPetWindowPreferences: "settings:get-pet-window-preferences",
+  setPetWindowSize: "settings:set-pet-window-size",
   listApplications: "applications:list",
   getSessionSnapshot: "session:get",
   startSession: "session:start",
@@ -79,6 +83,11 @@ export interface SessionPreferences {
   readonly intensity: SessionIntensity;
 }
 
+/** The renderer-visible portion of pet-window preferences. */
+export interface PetWindowPreferences {
+  readonly sizePx: number;
+}
+
 export interface SessionStartConfig {
   readonly task: string;
   readonly targetApplication: ApplicationSummary;
@@ -121,6 +130,8 @@ export interface SessionSnapshot {
 export interface FocusFamiliarApi {
   readonly getAppInfo: () => Promise<AppInfo>;
   readonly requestWindowAction: (action: WindowAction) => Promise<void>;
+  readonly getPetWindowPreferences: () => Promise<PetWindowPreferences>;
+  readonly setPetWindowSize: (sizePx: number) => Promise<PetWindowPreferences>;
   readonly listApplications: () => Promise<readonly ApplicationSummary[]>;
   readonly getSessionSnapshot: () => Promise<SessionSnapshot>;
   readonly startSession: (
@@ -257,6 +268,32 @@ export function parseSessionPreferences(value: unknown): SessionPreferences {
     interventionAfterMs: value.interventionAfterMs,
     intensity: value.intensity,
   };
+}
+
+export function parsePetWindowSize(value: unknown): number {
+  if (
+    !Number.isSafeInteger(value) ||
+    (value as number) < PET_WINDOW_SIZE_MIN ||
+    (value as number) > PET_WINDOW_SIZE_MAX
+  ) {
+    throw new Error(
+      `Pet size must be a whole number from ${PET_WINDOW_SIZE_MIN} to ${PET_WINDOW_SIZE_MAX} pixels.`,
+    );
+  }
+  return value as number;
+}
+
+export function parsePetWindowPreferences(
+  value: unknown,
+): PetWindowPreferences {
+  if (!isRecord(value)) {
+    throw new Error("Malformed pet window preferences.");
+  }
+  try {
+    return { sizePx: parsePetWindowSize(value.sizePx) };
+  } catch {
+    throw new Error("Malformed pet window preferences.");
+  }
 }
 
 export function parsePreferencesFlushRequestId(value: unknown): string {
