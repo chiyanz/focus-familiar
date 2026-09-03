@@ -69,12 +69,13 @@ the Electron startup smoke test verifies that the pet follows a live session
 through stop.
 
 The Shokupan source poses and bundled runtime frames also have a reproducible
-cocoa contour outside their silhouettes. It removes pale edge fringe on dark
-desktops without flattening the PNG transparency. Idle frames are translated
-to a shared center and baseline without rescaling. The visual lab includes a
-dark-canvas toggle and exercises the same hover actions as the app, while the
-macOS CI job validates every source and runtime PNG with idempotent edge and
-alignment tools.
+cocoa edge band. Four exterior pixels protect fractional scaling, while three
+inset pixels replace the opaque pale antialias dashes present in the generated
+source art. This removes the visible white halo on dark desktops without
+flattening PNG transparency. Idle frames are translated to a shared center and
+baseline without rescaling. The visual lab includes a dark-canvas toggle and
+exercises the same hover actions as the app, while the macOS CI job validates
+every source and runtime PNG with idempotent edge and alignment tools.
 
 Automated coverage includes ambient and one-shot animation playback, injected
 random hover selection, reduced-motion and phase guards, drag-region separation, bounded geometry,

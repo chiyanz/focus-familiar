@@ -16,11 +16,13 @@ There are 25 retained files: one canonical design, eight idle actions, eight
 breathing-loop frames, and eight reactions. Each has a real alpha channel while
 preserving the cat's cream and white interior pixels.
 
-All silhouettes include an approximately four-source-pixel cocoa-brown
-exterior contour. This keeps the pale fur from reading as a white fringe on
-dark desktops after the browser window scales the sprite down while preserving
-fully transparent backgrounds. The macOS-only cleanup is reproducible and
-idempotent:
+All silhouettes include a continuous cocoa-brown edge band: four source pixels
+outside the generated silhouette plus three pixels inset into its opaque edge.
+The inset removes fully opaque white and cream antialias dashes that an alpha
+check alone cannot detect. This keeps pale fur from reading as a white fringe
+on dark desktops after the browser window scales the sprite down while
+preserving fully transparent backgrounds. The macOS-only cleanup is
+reproducible and idempotent:
 
 ```bash
 find docs/design/assets/shokupan-cat/isolated src/renderer/assets/shokupan-cat \
@@ -40,9 +42,10 @@ swift scripts/normalize-idle-loop.swift --in-place \
 npm run test:sprite-alignment
 ```
 
-The validator checks the shared 384x512 canvas, center (x=192 +/- 1 px),
-baseline (y=460 +/- 1 px), and fully transparent RGB channels. These remain
-generated concept art, not pixel-clean production sprites; palette cleanup and
-animation review may still refine the final look. The consolidated source sheets
-and rejected design directions were intentionally removed after isolation. They
-remain recoverable from Git history if needed for provenance or debugging.
+The validators check the shared 384x512 canvas, center (x=192 +/- 1 px),
+baseline (y=460 +/- 1 px), fully transparent RGB channels, the exterior cocoa
+contour, and the inset cocoa edge band. These remain generated concept art, not
+pixel-clean production sprites; palette cleanup and animation review may still
+refine the final look. The consolidated source sheets and rejected design
+directions were intentionally removed after isolation. They remain recoverable
+from Git history if needed for provenance or debugging.
