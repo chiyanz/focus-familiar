@@ -536,10 +536,10 @@ async function verifySmokeBoundary(): Promise<void> {
     `);
     if (
       !sessionResult.ok ||
-      sessionResult.appInfo.version !== "0.1.0-prototype.4" ||
+      sessionResult.appInfo.version !== "0.1.0-prototype.5" ||
       sessionResult.updateStatus.phase !== "not-checked" ||
-      sessionResult.updateStatus.currentVersion !== "0.1.0-prototype.4" ||
-      !sessionResult.renderedUpdateStatus?.includes("0.1.0-prototype.4") ||
+      sessionResult.updateStatus.currentVersion !== "0.1.0-prototype.5" ||
+      !sessionResult.renderedUpdateStatus?.includes("0.1.0-prototype.5") ||
       !sessionResult.updateCheckEnabled ||
       !sessionResult.updateReleaseHidden ||
       (expectsSmokeRecovery &&

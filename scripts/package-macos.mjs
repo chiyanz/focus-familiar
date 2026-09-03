@@ -75,8 +75,8 @@ const signingMode = resolveMacOSSigningMode({
 });
 const archiveName =
   signingMode.mode === "notarized"
-    ? `focus-familiar-${marketingVersion}-macos-arm64.zip`
-    : `focus-familiar-${marketingVersion}-macos-arm64-local-adhoc.zip`;
+    ? `focus-familiar-${applicationVersion}-macos-arm64.zip`
+    : `focus-familiar-${applicationVersion}-macos-arm64-local-adhoc.zip`;
 const archivePath = join(releaseDirectory, archiveName);
 const checksumPath = `${archivePath}.sha256`;
 

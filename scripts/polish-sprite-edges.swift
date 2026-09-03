@@ -8,6 +8,7 @@ import UniformTypeIdentifiers
 private let alphaOpaqueThreshold: UInt8 = 240
 private let searchRadius = 3
 private let outlineRadius = 4
+private let haloInsetDepth = 3
 private let outlineColor: (red: UInt8, green: UInt8, blue: UInt8) = (106, 53, 25)
 
 struct ProcessedSprite {
@@ -18,6 +19,7 @@ struct ProcessedSprite {
   let recoloredPixels: Int
   let transparentPixels: Int
   let clearedTransparentPixels: Int
+  let recoloredHaloPixels: Int
   let addedOutlinePixels: Int
   let recoloredCanvasEdgePixels: Int
 }
@@ -77,6 +79,12 @@ do {
           "\(processed.addedOutlinePixels) silhouette pixels still need the \(outlineRadius)-pixel polished outline"
         )
       }
+      guard processed.recoloredHaloPixels == 0 else {
+        throw SpriteError.validationFailed(
+          inputPath,
+          "\(processed.recoloredHaloPixels) pixels remain in the interior silhouette band"
+        )
+      }
       guard processed.recoloredPixels == 0 else {
         throw SpriteError.validationFailed(
           inputPath,
@@ -101,6 +109,7 @@ do {
       "Polished \(inputURL.lastPathComponent): "
         + "\(processed.width)x\(processed.height), "
         + "\(processed.recoloredPixels)/\(processed.partialAlphaPixels) edge pixels recolored, "
+        + "\(processed.recoloredHaloPixels) opaque halo pixels recolored, "
         + "\(processed.addedOutlinePixels) outline pixels added, "
         + "\(processed.recoloredCanvasEdgePixels) canvas-edge pixels recolored, "
         + "\(processed.transparentPixels) transparent pixels retained -> "
@@ -151,6 +160,7 @@ func polishSprite(at url: URL) throws -> ProcessedSprite {
   var transparentPixels = 0
   let sourceTransparentRGBPixels = countRawTransparentRGBPixels(in: image)
   var convertedTransparentRGBPixels = 0
+  var recoloredHaloPixels = 0
   var addedOutlinePixels = 0
   var recoloredCanvasEdgePixels = 0
 
@@ -200,7 +210,6 @@ func polishSprite(at url: URL) throws -> ProcessedSprite {
     width: width,
     height: height
   )
-
   // Cropped reaction art can touch a canvas boundary, where there is no room
   // to add an exterior pixel. Color only those outermost opaque pixels with
   // the same contour color so a pale vertical or horizontal seam cannot leak
@@ -284,6 +293,20 @@ func polishSprite(at url: URL) throws -> ProcessedSprite {
     }
   }
 
+  // Run the inset pass after the exterior contour exists. That makes the same
+  // rule work for a newly generated sprite and for an already polished one:
+  // the first seven visible layers must all be cocoa.
+  recoloredHaloPixels = polishOpaqueHalo(
+    pixels: &pixels,
+    exteriorTransparency: exteriorTransparentMask(
+      pixels: pixels,
+      width: width,
+      height: height
+    ),
+    width: width,
+    height: height
+  )
+
   guard let outputContext = CGContext(
     data: &pixels,
     width: width,
@@ -322,9 +345,121 @@ func polishSprite(at url: URL) throws -> ProcessedSprite {
     recoloredPixels: recoloredPixels,
     transparentPixels: transparentPixels,
     clearedTransparentPixels: max(sourceTransparentRGBPixels, convertedTransparentRGBPixels),
+    recoloredHaloPixels: recoloredHaloPixels,
     addedOutlinePixels: addedOutlinePixels,
     recoloredCanvasEdgePixels: recoloredCanvasEdgePixels
   )
+}
+
+// Generated source art can contain a fully opaque white or cream antialias
+// line immediately inside an otherwise correct cocoa contour. Alpha-only
+// checks cannot see that halo, and downscaling makes its isolated pale pixels
+// read as a white border. Extend the cocoa contour through the first few
+// artwork layers so its inside edge is continuous; genuine cream fur deeper
+// in the sprite remains unchanged.
+func polishOpaqueHalo(
+  pixels: inout [UInt8],
+  exteriorTransparency: [Bool],
+  width: Int,
+  height: Int
+) -> Int {
+  let maxDepth = outlineRadius + haloInsetDepth
+  let depths = exteriorEdgeDepth(
+    pixels: pixels,
+    exteriorTransparency: exteriorTransparency,
+    width: width,
+    height: height,
+    maxDepth: maxDepth
+  )
+  var recolored = 0
+
+  for y in 0 ..< height {
+    for x in 0 ..< width {
+      let index = y * width + x
+      let depth = depths[index]
+      guard depth > 0, depth <= maxDepth else { continue }
+
+      let offset = pixelOffset(x: x, y: y, width: width)
+      let alpha = pixels[offset + 3]
+      guard alpha > 0 else { continue }
+      let red = unpremultiply(pixels[offset], by: alpha)
+      let green = unpremultiply(pixels[offset + 1], by: alpha)
+      let blue = unpremultiply(pixels[offset + 2], by: alpha)
+      guard
+        red != outlineColor.red || green != outlineColor.green || blue != outlineColor.blue
+      else { continue }
+
+      pixels[offset] = premultiply(outlineColor.red, by: alpha)
+      pixels[offset + 1] = premultiply(outlineColor.green, by: alpha)
+      pixels[offset + 2] = premultiply(outlineColor.blue, by: alpha)
+      recolored += 1
+    }
+  }
+
+  return recolored
+}
+
+// Measure opaque Chebyshev distance from exterior transparency. Internal
+// transparent details are deliberately not seeds, so their artwork is not
+// mistaken for the outside silhouette.
+func exteriorEdgeDepth(
+  pixels: [UInt8],
+  exteriorTransparency: [Bool],
+  width: Int,
+  height: Int,
+  maxDepth: Int
+) -> [Int] {
+  var depths = [Int](repeating: -1, count: width * height)
+  var queue: [Int] = []
+
+  for index in exteriorTransparency.indices where exteriorTransparency[index] {
+    depths[index] = 0
+    queue.append(index)
+  }
+
+  func seedOpaqueCanvasEdge(x: Int, y: Int) {
+    let index = y * width + x
+    guard depths[index] == -1 else { return }
+    let offset = pixelOffset(x: x, y: y, width: width)
+    guard pixels[offset + 3] > 0 else { return }
+    depths[index] = 1
+    queue.append(index)
+  }
+
+  for x in 0 ..< width {
+    seedOpaqueCanvasEdge(x: x, y: 0)
+    if height > 1 { seedOpaqueCanvasEdge(x: x, y: height - 1) }
+  }
+  if width > 1 {
+    for y in 1 ..< max(1, height - 1) {
+      seedOpaqueCanvasEdge(x: 0, y: y)
+      seedOpaqueCanvasEdge(x: width - 1, y: y)
+    }
+  }
+
+  var queueIndex = 0
+  while queueIndex < queue.count {
+    let index = queue[queueIndex]
+    queueIndex += 1
+    let depth = depths[index]
+    guard depth < maxDepth else { continue }
+
+    let x = index % width
+    let y = index / width
+    for neighborY in max(0, y - 1) ... min(height - 1, y + 1) {
+      for neighborX in max(0, x - 1) ... min(width - 1, x + 1) {
+        let neighborIndex = neighborY * width + neighborX
+        guard depths[neighborIndex] == -1 else { continue }
+        let neighborOffset = pixelOffset(x: neighborX, y: neighborY, width: width)
+        guard pixels[neighborOffset + 3] > 0 else { continue }
+
+        depths[neighborIndex] = depth + 1
+        queue.append(neighborIndex)
+      }
+    }
+  }
+
+  return depths
 }
 
 // A premultiplied bitmap context turns RGB channels to zero when alpha is

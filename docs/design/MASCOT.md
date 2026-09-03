@@ -62,10 +62,11 @@ approved.
 - Design at approximately `48 x 48` logical pixels per normal pose, then scale
   with nearest-neighbor interpolation.
 - Use deliberate pixel clusters and hard edges; no antialiasing.
-- Finish the transparent silhouette with a four-source-pixel cocoa-brown
-  contour. It stays visually crisp when the source art is fractionally scaled
-  down at the smallest supported avatar size, keeping pale fur clean over both
-  light and dark desktops.
+- Finish the transparent silhouette with a continuous cocoa-brown edge band:
+  four source pixels outside the generated silhouette and three pixels inset
+  into it. The inset replaces opaque pale antialias dashes that alpha-only
+  cleanup cannot detect, keeping the edge crisp when the source art is scaled
+  down over light and dark desktops.
 - Use roughly 12–16 colors with simple two-step shading.
 - Keep idle animation sparse and low-arousal. Favor held poses with occasional
   small changes over constant movement.
