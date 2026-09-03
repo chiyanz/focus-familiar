@@ -473,6 +473,84 @@ progress::-webkit-progress-value {
   justify-self: end;
 }
 
+.update-card {
+  display: grid;
+  padding: 16px 18px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 13px;
+  border: 1px solid #e5d9ea;
+  border-radius: 18px;
+  background: rgb(252 249 255 / 72%);
+  box-shadow: 0 10px 30px rgb(87 66 105 / 6%);
+}
+
+.update-card[data-update-phase="available"] {
+  border-color: #d6bcde;
+  background: rgb(250 243 255 / 84%);
+}
+
+.update-card[data-update-phase="error"] {
+  border-color: #edcfcb;
+}
+
+.update-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  place-items: center;
+  color: #76556c;
+  background: #f3e9f4;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.update-card[data-update-phase="checking"] .update-icon {
+  animation: update-spin 1.2s linear infinite;
+}
+
+.update-copy .section-kicker {
+  margin-bottom: 4px;
+}
+
+.update-copy h2 {
+  margin-bottom: 4px;
+  font-size: 14px;
+}
+
+.update-copy p {
+  margin-bottom: 0;
+  color: #786977;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.update-copy .update-privacy {
+  margin-top: 3px;
+  color: #998892;
+  font-size: 10px;
+}
+
+.update-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.update-button {
+  min-height: 32px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.update-button[hidden] {
+  display: none;
+}
+
 .privacy-card {
   display: flex;
   padding: 14px 15px;
@@ -546,6 +624,21 @@ footer {
   .pet-settings-card {
     grid-template-columns: 1fr;
     gap: 14px;
+  }
+
+  .update-card {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .update-actions {
+    grid-column: 2;
+    justify-self: start;
+  }
+}
+
+@keyframes update-spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 

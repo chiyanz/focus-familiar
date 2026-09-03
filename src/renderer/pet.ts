@@ -120,7 +120,34 @@ try {
   // the idle pet; the settings action remains available for recovery.
 }
 
+let unsubscribeFromUpdateStatus: (() => void) | undefined;
+try {
+  const renderUpdateAvailability = (available: boolean): void => {
+    if (!settingsButton) return;
+    settingsButton.dataset.updateAvailable = String(available);
+    settingsButton.title = available
+      ? "Update available — open settings"
+      : "Open settings";
+    settingsButton.setAttribute(
+      "aria-label",
+      available
+        ? "Update available. Open Focus Familiar settings"
+        : "Open Focus Familiar settings",
+    );
+  };
+  unsubscribeFromUpdateStatus = sessionApi.onUpdateStatusChanged((status) => {
+    renderUpdateAvailability(status.phase === "available");
+  });
+  void sessionApi
+    .getUpdateStatus()
+    .then((status) => renderUpdateAvailability(status.phase === "available"))
+    .catch(() => undefined);
+} catch {
+  // An older development preload can still show and control the pet.
+}
+
 window.addEventListener("beforeunload", () => {
   unsubscribeFromSession?.();
+  unsubscribeFromUpdateStatus?.();
   stopPetAnimation();
 });

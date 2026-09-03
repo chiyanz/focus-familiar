@@ -6,9 +6,11 @@ import {
   type FocusSessionConfig,
   type FocusSessionState,
 } from "../core";
+import type { UpdateStatus } from "../shared/ipc";
 import {
   assertTrustedSender,
   publishSessionSnapshot,
+  publishUpdateStatus,
   registerIpcHandlers,
   toSessionSnapshot,
   type ManagedWindow,
@@ -132,6 +134,28 @@ describe("session IPC projection", () => {
   });
 });
 
+describe("update IPC projection", () => {
+  it("broadcasts only the sanitized update status", () => {
+    const entry = managedWindow();
+    publishUpdateStatus([entry], {
+      phase: "available",
+      currentVersion: "0.1.0-prototype.2",
+      latestVersion: "0.1.0-prototype.3",
+      releaseTag: "v0.1.0-prototype.3",
+    });
+
+    expect(entry.window.webContents.send).toHaveBeenCalledWith(
+      "updates:status-changed",
+      {
+        phase: "available",
+        currentVersion: "0.1.0-prototype.2",
+        latestVersion: "0.1.0-prototype.3",
+        releaseTag: "v0.1.0-prototype.3",
+      },
+    );
+  });
+});
+
 describe("session IPC handlers", () => {
   it("lists apps and drives start, pause, resume, stop through the runtime", async () => {
     const entry = managedWindow();
@@ -191,6 +215,23 @@ describe("session IPC handlers", () => {
     });
     const removeHandler = vi.fn();
     const acknowledgePreferencesFlush = vi.fn();
+    let updateStatus: UpdateStatus = {
+      phase: "not-checked",
+      currentVersion: "0.1.0-prototype.3",
+      latestVersion: null,
+      releaseTag: null,
+    };
+    const checkForUpdates = vi.fn(async () => {
+      const available = {
+        phase: "available" as const,
+        currentVersion: "0.1.0-prototype.3",
+        latestVersion: "0.1.0-prototype.4",
+        releaseTag: "v0.1.0-prototype.4",
+      };
+      updateStatus = available;
+      return available;
+    });
+    const openAvailableRelease = vi.fn(async () => undefined);
     const dispose = registerIpcHandlers({
       app: {
         getName: () => "Focus Familiar",
@@ -222,6 +263,11 @@ describe("session IPC handlers", () => {
           return { ok: true };
         },
       }),
+      getUpdateController: () => ({
+        snapshot: () => updateStatus,
+        check: checkForUpdates,
+        openAvailableRelease,
+      }),
       getPetWindowSize: () => petWindowSize,
       setPetWindowSize,
       acknowledgePreferencesFlush,
@@ -236,6 +282,20 @@ describe("session IPC handlers", () => {
       editor,
       browser,
     ]);
+    expect(handlers.get("updates:get-status")?.(event)).toMatchObject({
+      phase: "not-checked",
+    });
+    await expect(handlers.get("updates:check")?.(event)).resolves.toMatchObject(
+      {
+        phase: "available",
+        latestVersion: "0.1.0-prototype.4",
+      },
+    );
+    await expect(
+      handlers.get("updates:open-release")?.(event),
+    ).resolves.toBeUndefined();
+    expect(checkForUpdates).toHaveBeenCalledOnce();
+    expect(openAvailableRelease).toHaveBeenCalledOnce();
     expect(
       handlers.get("settings:get-pet-window-preferences")?.(event),
     ).toEqual({ sizePx: 248 });
@@ -276,7 +336,7 @@ describe("session IPC handlers", () => {
     expect(acknowledgePreferencesFlush).toHaveBeenCalledWith("request-1");
 
     dispose();
-    expect(removeHandler).toHaveBeenCalledTimes(11);
+    expect(removeHandler).toHaveBeenCalledTimes(14);
   });
 
   it("rejects session operations when the macOS service is unavailable", async () => {
@@ -299,6 +359,7 @@ describe("session IPC handlers", () => {
       getApplicationProvider: () => undefined,
       getSessionController: () => undefined,
       getSettingsController: () => undefined,
+      getUpdateController: () => undefined,
       getPetWindowSize: () => undefined,
       setPetWindowSize: async () => {
         throw new Error("Pet window preferences are unavailable.");

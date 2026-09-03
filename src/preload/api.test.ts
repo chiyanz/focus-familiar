@@ -36,6 +36,12 @@ const validPreferences: SessionPreferences = {
   intensity: "balanced",
 };
 const validPetWindowPreferences = { sizePx: 248 };
+const validUpdateStatus = {
+  phase: "available" as const,
+  currentVersion: "0.1.0-prototype.2",
+  latestVersion: "0.1.0-prototype.3",
+  releaseTag: "v0.1.0-prototype.3",
+};
 
 describe("preload API", () => {
   it("exposes only the documented renderer operations", async () => {
@@ -54,6 +60,9 @@ describe("preload API", () => {
       if (channel === "settings:set-pet-window-size") {
         return { sizePx: payload };
       }
+      if (channel === "updates:get-status" || channel === "updates:check") {
+        return validUpdateStatus;
+      }
       if (
         channel === "settings:get-session-preferences" ||
         channel === "settings:save-session-preferences"
@@ -70,6 +79,10 @@ describe("preload API", () => {
 
     expect(Object.keys(api)).toEqual([
       "getAppInfo",
+      "getUpdateStatus",
+      "checkForUpdates",
+      "openUpdateRelease",
+      "onUpdateStatusChanged",
       "requestWindowAction",
       "getPetWindowPreferences",
       "setPetWindowSize",
@@ -124,6 +137,9 @@ describe("preload API", () => {
     await expect(api.requestSessionAction("pause")).resolves.toEqual(
       validSnapshot,
     );
+    await expect(api.getUpdateStatus()).resolves.toEqual(validUpdateStatus);
+    await expect(api.checkForUpdates()).resolves.toEqual(validUpdateStatus);
+    await expect(api.openUpdateRelease()).resolves.toBeUndefined();
     expect(invoke).toHaveBeenNthCalledWith(1, "app:get-info");
     expect(invoke).toHaveBeenNthCalledWith(2, "window:action", "show-settings");
     expect(invoke).toHaveBeenNthCalledWith(
@@ -161,6 +177,9 @@ describe("preload API", () => {
       intensity: "balanced",
     });
     expect(invoke).toHaveBeenNthCalledWith(10, "session:action", "pause");
+    expect(invoke).toHaveBeenNthCalledWith(11, "updates:get-status");
+    expect(invoke).toHaveBeenNthCalledWith(12, "updates:check");
+    expect(invoke).toHaveBeenNthCalledWith(13, "updates:open-release");
     expect(on).not.toHaveBeenCalled();
   });
 
@@ -203,6 +222,9 @@ describe("preload API", () => {
     );
     await expect(api.getSessionSnapshot()).rejects.toThrow(
       "Malformed session snapshot.",
+    );
+    await expect(api.getUpdateStatus()).rejects.toThrow(
+      "Malformed update status.",
     );
   });
 
@@ -280,6 +302,26 @@ describe("preload API", () => {
       expect.objectContaining({ phase: "focused" }),
     );
     expect(typeof unsubscribe).toBe("function");
+  });
+
+  it("parses update status events and rejects malformed payloads", () => {
+    let callback: ((payload: unknown) => void) | undefined;
+    const invoke = vi.fn<PreloadInvoker["invoke"]>(async () => validSnapshot);
+    const on = vi.fn<PreloadInvoker["on"]>((channel, listener) => {
+      expect(channel).toBe("updates:status-changed");
+      callback = listener;
+      return () => undefined;
+    });
+    const api = createPreloadApi({ invoke, on });
+    const listener = vi.fn();
+
+    const unsubscribe = api.onUpdateStatusChanged(listener);
+    callback?.(validUpdateStatus);
+    expect(listener).toHaveBeenCalledWith(validUpdateStatus);
+    expect(typeof unsubscribe).toBe("function");
+    expect(() => callback?.({ phase: "available" })).toThrow(
+      "Malformed update status.",
+    );
   });
 
   it("rejects malformed session change events", () => {

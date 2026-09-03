@@ -6,6 +6,7 @@ import {
   cp,
   lstat,
   mkdir,
+  readFile,
   readdir,
   rename,
   rm,
@@ -21,9 +22,15 @@ import { notarize } from "@electron/notarize";
 import { sign } from "@electron/osx-sign";
 
 import { resolveMacOSSigningMode } from "./macos-signing.mjs";
+import { resolvePackageVersionMetadata } from "./package-version.mjs";
 
 const execFile = promisify(execFileCallback);
 const projectDirectory = dirname(dirname(fileURLToPath(import.meta.url)));
+const rootPackage = JSON.parse(
+  await readFile(join(projectDirectory, "package.json"), "utf8"),
+);
+const { applicationVersion, marketingVersion, bundleBuildVersion } =
+  resolvePackageVersionMetadata(rootPackage);
 const releaseDirectory = join(projectDirectory, "release");
 const electronTemplate = join(
   projectDirectory,
@@ -68,8 +75,8 @@ const signingMode = resolveMacOSSigningMode({
 });
 const archiveName =
   signingMode.mode === "notarized"
-    ? "focus-familiar-0.1.0-macos-arm64.zip"
-    : "focus-familiar-0.1.0-macos-arm64-local-adhoc.zip";
+    ? `focus-familiar-${marketingVersion}-macos-arm64.zip`
+    : `focus-familiar-${marketingVersion}-macos-arm64-local-adhoc.zip`;
 const archivePath = join(releaseDirectory, archiveName);
 const checksumPath = `${archivePath}.sha256`;
 
@@ -144,7 +151,7 @@ await writeFile(
     {
       name: "focus-familiar",
       productName: "Focus Familiar",
-      version: "0.1.0",
+      version: applicationVersion,
       private: true,
       type: "module",
       main: "out/main/index.js",
@@ -296,8 +303,8 @@ async function patchInfoPlist(path) {
     ["CFBundleDisplayName", "Focus Familiar"],
     ["CFBundleName", "Focus Familiar"],
     ["CFBundleIdentifier", "com.chiyanz.focusfamiliar"],
-    ["CFBundleShortVersionString", "0.1.0"],
-    ["CFBundleVersion", "0.1.0"],
+    ["CFBundleShortVersionString", marketingVersion],
+    ["CFBundleVersion", bundleBuildVersion],
     ["LSApplicationCategoryType", "public.app-category.productivity"],
     ["LSMinimumSystemVersion", "13.0"],
   ];

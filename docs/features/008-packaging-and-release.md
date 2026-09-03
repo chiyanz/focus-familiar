@@ -19,7 +19,8 @@ Version 0.1 can be built reproducibly and distributed as a trustworthy macOS app
 ## Non-goals
 
 - Mac App Store submission
-- Automatic updates unless separately reviewed
+- Automatic download or installation; availability notices are reviewed in
+  [Feature 009](009-update-notices.md)
 - Windows or Linux packages
 
 ## Acceptance criteria
@@ -49,6 +50,12 @@ The packaged smoke test launches the generated application with isolated local
 data and drives the same security, asset, session, persistence, and clean-quit
 checks used by the development build. `npm run prototype` performs the complete
 build, package, checksum, signature verification, and launch check.
+
+Package metadata now gives each prototype an explicit SemVer prerelease
+identity and a numeric macOS bundle build number. The packaging script derives
+the runtime package and bundle metadata from that central source. Update
+availability notices are implemented separately in
+[Feature 009](009-update-notices.md); installation remains manual.
 
 Local builds remain Apple Silicon-only and ad-hoc signed, with `local-adhoc` in
 their archive name. The public `release:macos` command instead fails closed

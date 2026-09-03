@@ -11,6 +11,7 @@ import {
   parsePreferencesFlushRequestId,
   parseSessionSnapshot,
   parseSessionStartConfig,
+  parseUpdateStatus,
   type AppInfo,
   type ApplicationSummary,
   type FocusFamiliarApi,
@@ -21,6 +22,7 @@ import {
   type SessionSnapshot,
   type SessionPreferences,
   type SessionStartConfig,
+  type UpdateStatus,
   type WindowAction,
 } from "../shared/ipc";
 
@@ -34,6 +36,22 @@ export function createPreloadApi(invoker: PreloadInvoker): FocusFamiliarApi {
     getAppInfo: async (): Promise<AppInfo> => {
       const response = await invoker.invoke(IPC_CHANNELS.getAppInfo);
       return parseAppInfo(response);
+    },
+    getUpdateStatus: async (): Promise<UpdateStatus> => {
+      const response = await invoker.invoke(IPC_CHANNELS.getUpdateStatus);
+      return parseUpdateStatus(response);
+    },
+    checkForUpdates: async (): Promise<UpdateStatus> => {
+      const response = await invoker.invoke(IPC_CHANNELS.checkForUpdates);
+      return parseUpdateStatus(response);
+    },
+    openUpdateRelease: async (): Promise<void> => {
+      await invoker.invoke(IPC_CHANNELS.openUpdateRelease);
+    },
+    onUpdateStatusChanged: (listener) => {
+      return invoker.on(IPC_EVENTS.updateStatusChanged, (payload) => {
+        listener(parseUpdateStatus(payload));
+      });
     },
     requestWindowAction: async (action: WindowAction): Promise<void> => {
       // Keep a validation guard here as well as in the main process. TypeScript

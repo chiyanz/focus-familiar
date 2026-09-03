@@ -2,6 +2,9 @@ import { PET_WINDOW_SIZE_MAX, PET_WINDOW_SIZE_MIN } from "../core/settings";
 
 export const IPC_CHANNELS = {
   getAppInfo: "app:get-info",
+  getUpdateStatus: "updates:get-status",
+  checkForUpdates: "updates:check",
+  openUpdateRelease: "updates:open-release",
   windowAction: "window:action",
   getPetWindowPreferences: "settings:get-pet-window-preferences",
   setPetWindowSize: "settings:set-pet-window-size",
@@ -19,6 +22,7 @@ export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];
 /** Main-to-renderer notifications. Keep this allow-list separate from invoke channels. */
 export const IPC_EVENTS = {
   sessionChanged: "session:changed",
+  updateStatusChanged: "updates:status-changed",
   preferencesFlushRequested: "settings:flush-requested",
 } as const;
 
@@ -55,6 +59,24 @@ export const SESSION_INTENSITIES = ["gentle", "balanced", "strict"] as const;
 export type SessionIntensity = (typeof SESSION_INTENSITIES)[number];
 
 export type AppPlatform = "darwin" | "win32" | "linux" | "other";
+
+export const UPDATE_PHASES = [
+  "not-checked",
+  "checking",
+  "up-to-date",
+  "available",
+  "error",
+] as const;
+
+export type UpdatePhase = (typeof UPDATE_PHASES)[number];
+
+/** A deliberately small projection of update state for unprivileged renderers. */
+export interface UpdateStatus {
+  readonly phase: UpdatePhase;
+  readonly currentVersion: string;
+  readonly latestVersion: string | null;
+  readonly releaseTag: string | null;
+}
 
 export interface AppInfo {
   readonly name: string;
@@ -129,6 +151,12 @@ export interface SessionSnapshot {
 
 export interface FocusFamiliarApi {
   readonly getAppInfo: () => Promise<AppInfo>;
+  readonly getUpdateStatus: () => Promise<UpdateStatus>;
+  readonly checkForUpdates: () => Promise<UpdateStatus>;
+  readonly openUpdateRelease: () => Promise<void>;
+  readonly onUpdateStatusChanged: (
+    listener: (status: UpdateStatus) => void,
+  ) => () => void;
   readonly requestWindowAction: (action: WindowAction) => Promise<void>;
   readonly getPetWindowPreferences: () => Promise<PetWindowPreferences>;
   readonly setPetWindowSize: (sizePx: number) => Promise<PetWindowPreferences>;
@@ -448,6 +476,34 @@ export function parseAppInfo(value: unknown): AppInfo {
   return { name, version, platform };
 }
 
+export function parseUpdateStatus(value: unknown): UpdateStatus {
+  if (!isRecord(value) || !isUpdatePhase(value.phase)) {
+    throw new Error("Malformed update status.");
+  }
+
+  const currentVersion = parseBoundedIdentifier(value.currentVersion);
+  const latestVersion = parseNullableBoundedIdentifier(value.latestVersion);
+  const releaseTag = parseNullableBoundedIdentifier(value.releaseTag);
+  const hasAvailableRelease = value.phase === "available";
+
+  if (
+    !currentVersion ||
+    latestVersion === undefined ||
+    releaseTag === undefined ||
+    (hasAvailableRelease && (!latestVersion || !releaseTag)) ||
+    (!hasAvailableRelease && (latestVersion !== null || releaseTag !== null))
+  ) {
+    throw new Error("Malformed update status.");
+  }
+
+  return {
+    phase: value.phase,
+    currentVersion,
+    latestVersion,
+    releaseTag,
+  };
+}
+
 export function toAppPlatform(platform: string): AppPlatform {
   if (platform === "darwin" || platform === "win32" || platform === "linux") {
     return platform;
@@ -462,6 +518,13 @@ function isAppPlatform(value: unknown): value is AppPlatform {
     value === "win32" ||
     value === "linux" ||
     value === "other"
+  );
+}
+
+function isUpdatePhase(value: unknown): value is UpdatePhase {
+  return (
+    typeof value === "string" &&
+    (UPDATE_PHASES as readonly string[]).includes(value)
   );
 }
 
@@ -545,6 +608,19 @@ function normalizeNonEmptyString(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const normalized = value.trim();
   return normalized.length > 0 ? normalized : null;
+}
+
+function parseBoundedIdentifier(value: unknown): string | null {
+  if (typeof value !== "string" || value.length > 128) return null;
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
+function parseNullableBoundedIdentifier(
+  value: unknown,
+): string | null | undefined {
+  if (value === null) return null;
+  return parseBoundedIdentifier(value) ?? undefined;
 }
 
 function isNonNegativeInteger(value: unknown): value is number {

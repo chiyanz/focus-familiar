@@ -23,6 +23,7 @@ import {
   type PetWindowPreferences,
   type SessionPreferences,
   type SessionSnapshot,
+  type UpdateStatus,
 } from "../shared/ipc";
 import {
   isTrustedRendererUrl,
@@ -45,10 +46,17 @@ export interface IpcDependencies {
     | undefined;
   readonly getSessionController: () => SessionController | undefined;
   readonly getSettingsController: () => SettingsController | undefined;
+  readonly getUpdateController: () => UpdateController | undefined;
   readonly getPetWindowSize: () => number | undefined;
   readonly setPetWindowSize: (sizePx: number) => Promise<void>;
   readonly acknowledgePreferencesFlush: (requestId: string) => void;
   readonly createSessionId: () => string;
+}
+
+export interface UpdateController {
+  readonly snapshot: () => UpdateStatus;
+  readonly check: () => Promise<UpdateStatus>;
+  readonly openAvailableRelease: () => Promise<void>;
 }
 
 export interface SessionController {
@@ -84,6 +92,30 @@ export function registerIpcHandlers(dependencies: IpcDependencies): () => void {
       platform: toAppPlatform(process.platform),
     };
     return info;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.getUpdateStatus, (event) => {
+    assertTrustedSender(event, getWindows());
+    return requireService(
+      dependencies.getUpdateController(),
+      "Update checks are unavailable.",
+    ).snapshot();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.checkForUpdates, async (event) => {
+    assertTrustedSender(event, getWindows());
+    return requireService(
+      dependencies.getUpdateController(),
+      "Update checks are unavailable.",
+    ).check();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.openUpdateRelease, async (event) => {
+    assertTrustedSender(event, getWindows());
+    await requireService(
+      dependencies.getUpdateController(),
+      "Update checks are unavailable.",
+    ).openAvailableRelease();
   });
 
   ipcMain.handle(IPC_CHANNELS.windowAction, (event, payload: unknown) => {
@@ -215,6 +247,9 @@ export function registerIpcHandlers(dependencies: IpcDependencies): () => void {
 
   return () => {
     ipcMain.removeHandler(IPC_CHANNELS.getAppInfo);
+    ipcMain.removeHandler(IPC_CHANNELS.getUpdateStatus);
+    ipcMain.removeHandler(IPC_CHANNELS.checkForUpdates);
+    ipcMain.removeHandler(IPC_CHANNELS.openUpdateRelease);
     ipcMain.removeHandler(IPC_CHANNELS.windowAction);
     ipcMain.removeHandler(IPC_CHANNELS.getPetWindowPreferences);
     ipcMain.removeHandler(IPC_CHANNELS.setPetWindowSize);
@@ -226,6 +261,18 @@ export function registerIpcHandlers(dependencies: IpcDependencies): () => void {
     ipcMain.removeHandler(IPC_CHANNELS.saveSessionPreferences);
     ipcMain.removeHandler(IPC_CHANNELS.acknowledgePreferencesFlush);
   };
+}
+
+/** Broadcast only locally constructed, validated update metadata. */
+export function publishUpdateStatus(
+  windows: readonly ManagedWindow[],
+  status: UpdateStatus,
+): void {
+  for (const { window } of windows) {
+    if (!window.isDestroyed()) {
+      window.webContents.send(IPC_EVENTS.updateStatusChanged, status);
+    }
+  }
 }
 
 /** Broadcast only the deliberately sanitized session projection. */

@@ -22,6 +22,7 @@ macOS foreground-app events
             |
             v
 Electron main process ---- local persistence
+      |                   fixed GitHub release check
             |
             v
 Pure TypeScript focus engine
@@ -70,6 +71,16 @@ Owns transparent presentation and animation only. It renders the state supplied 
 ### Settings renderer
 
 Edits validated preferences and session configuration. The main process remains authoritative for persistence and session state.
+
+### Update boundary
+
+Packaged builds ask one fixed GitHub API endpoint for public release metadata
+after launch and every twelve hours. The main process bounds and validates the
+response, applies pure SemVer selection, and sends only sanitized status fields
+through preload. A renderer cannot fetch updates or choose an external URL.
+Opening the validated release page requires an explicit user action. No remote
+content is rendered and update failure never weakens focus behavior. See
+[ADR 0007](decisions/0007-github-update-notices.md).
 
 ## Platform boundary
 
@@ -123,7 +134,8 @@ and privacy decision. See [ADR 0005](decisions/0005-versioned-local-settings.md)
 - IPC channels are allow-listed and payloads are validated.
 - Pet pack paths cannot escape the pack directory.
 - Remote content is not rendered in privileged windows.
-- Network access is absent in version 0.1 except when deliberately added for packaging or update checks in a later reviewed milestone.
+- Runtime network access is limited to the reviewed GitHub release-availability
+  check; focus data and activity never enter the request.
 - Signing and notarization credentials remain outside the repository.
 - Public macOS packaging fails closed unless Developer ID signing and Apple
   notarization complete; ad-hoc local artifacts are named separately. See

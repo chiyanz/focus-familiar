@@ -58,7 +58,8 @@ The pet acknowledges the return briefly, resets the away timer, and resumes the 
 1. **Return over guilt.** Optimize for returning quickly, not shame or perfect streaks.
 2. **Calm by default.** The pet should disappear into the working environment while the user is focused.
 3. **Honest strictness.** Strict mode adds friction but never claims to be impossible to escape.
-4. **Local first.** The app should work without an account, network connection, or remote service.
+4. **Local first.** Focus behavior works without an account, network connection,
+   or remote service. A failure to check for app updates cannot affect it.
 5. **Explainable awareness.** The app must state exactly what it observes and why.
 6. **Safe interruption.** Never destroy work or trap the user during an urgent situation.
 7. **Replaceable personality.** Character art, animation, dialogue, and sounds are data rather than hard-coded product logic.
@@ -74,7 +75,9 @@ Version 0.1 may store the selected target application's bundle identifier and se
 - Clipboard contents
 - Microphone, camera, or location data
 
-No analytics or activity data leaves the Mac.
+No analytics or activity data leaves the Mac. Packaged builds make a disclosed
+request to GitHub Releases to detect app updates; it includes the app version,
+and GitHub receives the ordinary request IP address and user agent.
 
 ## Non-goals for version 0.1
 
@@ -93,4 +96,5 @@ No analytics or activity data leaves the Mac.
 - Nudges occur at predictable, testable thresholds.
 - The pet remains unobtrusive while the target application is active.
 - Every intervention has a visible escape or pause path.
-- The app operates without network access.
+- All focus behavior operates without network access; only the non-critical
+  update notice requires a connection.
