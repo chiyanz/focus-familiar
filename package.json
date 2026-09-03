@@ -24,12 +24,15 @@
     "test:watch": "vitest",
     "test:electron-smoke": "npm run build && node scripts/electron-smoke.mjs",
     "package:macos": "npm run build && node scripts/package-macos.mjs",
+    "release:macos": "node scripts/macos-release-preflight.mjs && npm run build && node scripts/package-macos.mjs --require-notarization",
     "test:packaged-smoke": "node scripts/packaged-smoke.mjs",
     "prototype": "npm run package:macos && npm run test:packaged-smoke",
     "package:validate": "node scripts/validate-package.mjs",
     "verify": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run build && npm run lab:build && npm run package:validate"
   },
   "devDependencies": {
+    "@electron/notarize": "3.1.1",
+    "@electron/osx-sign": "2.7.0",
     "@eslint/js": "9.39.5",
     "@types/node": "22.20.1",
     "electron": "44.1.1",

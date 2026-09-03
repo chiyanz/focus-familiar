@@ -27,6 +27,23 @@ published with the release.
 The prototype is ad-hoc signed but not Apple Developer ID signed or notarized,
 so this warning is expected. Never disable Gatekeeper globally.
 
+### If Open Anyway still does not work
+
+First confirm that the ZIP reports `OK` using the checksum step above. Then you
+may remove Chrome's quarantine attribute from this exact app and open it:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Focus Familiar.app"
+open "/Applications/Focus Familiar.app"
+```
+
+This does not disable Gatekeeper globally. It removes the download marker only
+from the verified Focus Familiar copy. Do not run it for an archive with a
+missing or mismatched checksum.
+
+Future public builds should use the repository's Developer ID and notarization
+workflow and will not require this fallback.
+
 ## Try a focus session
 
 1. Open the application you want to focus in first.
