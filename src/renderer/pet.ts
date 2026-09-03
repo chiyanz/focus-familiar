@@ -12,6 +12,7 @@ import interventionWaitUrl from "./assets/shokupan-cat/reactions/reaction-06-pol
 import nudgeStareUrl from "./assets/shokupan-cat/reactions/reaction-03-half-lens-stare.png";
 
 import type { SessionPhase } from "../shared/ipc";
+import { startPetAnimation } from "./pet-animation";
 import {
   getPetPresentation,
   PET_ASSET_PATHS,
@@ -47,7 +48,7 @@ const petAssetUrls: Record<PetAssetPath, string> = {
 
 let currentPhase: SessionPhase | undefined;
 let currentReducedMotion: boolean | undefined;
-let frameTimer: number | undefined;
+let stopAnimation: (() => void) | undefined;
 
 /**
  * Render a phase without knowing anything about foreground activity. The
@@ -65,34 +66,27 @@ export function renderPetPhase(
   currentPhase = phase;
   currentReducedMotion = reducedMotion;
   const presentation = getPetPresentation(phase, reducedMotion);
-  const firstFrame = presentation.frames[0];
 
   if (petShell) petShell.dataset.petPhase = phase;
+  if (petShell) petShell.dataset.reducedMotion = String(reducedMotion);
   if (petHint) petHint.textContent = presentation.statusText;
-  if (petImage && firstFrame) petImage.src = petAssetUrls[firstFrame];
 
-  stopFrameTimer();
+  stopPetAnimation();
 
-  if (
-    !petImage ||
-    presentation.mode !== "loop" ||
-    presentation.frameDurationMs === null
-  ) {
-    return;
+  if (petImage) {
+    stopAnimation = startPetAnimation(
+      presentation.timeline,
+      (asset) => {
+        petImage.src = petAssetUrls[asset];
+      },
+      window,
+    );
   }
-
-  let frameIndex = 0;
-  frameTimer = window.setInterval(() => {
-    frameIndex = (frameIndex + 1) % presentation.frames.length;
-    const nextFrame = presentation.frames[frameIndex];
-    if (nextFrame) petImage.src = petAssetUrls[nextFrame];
-  }, presentation.frameDurationMs);
 }
 
-function stopFrameTimer(): void {
-  if (frameTimer === undefined) return;
-  window.clearInterval(frameTimer);
-  frameTimer = undefined;
+function stopPetAnimation(): void {
+  stopAnimation?.();
+  stopAnimation = undefined;
 }
 
 settingsButton?.addEventListener("click", () => {
@@ -128,5 +122,5 @@ try {
 
 window.addEventListener("beforeunload", () => {
   unsubscribeFromSession?.();
-  stopFrameTimer();
+  stopPetAnimation();
 });
