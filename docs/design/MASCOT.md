@@ -62,6 +62,8 @@ approved.
 - Design at approximately `48 x 48` logical pixels per normal pose, then scale
   with nearest-neighbor interpolation.
 - Use deliberate pixel clusters and hard edges; no antialiasing.
+- Finish the transparent silhouette with a one-pixel cocoa-brown contour so
+  pale fur remains clean over both light and dark desktops.
 - Use roughly 12–16 colors with simple two-step shading.
 - Keep idle animation sparse and low-arousal. Favor held poses with occasional
   small changes over constant movement.
