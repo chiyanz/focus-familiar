@@ -5,6 +5,7 @@ import type {
   SessionPreferences,
   SessionSnapshot,
   SessionStartConfig,
+  UpdateStatus,
 } from "../shared/ipc";
 import {
   PET_WINDOW_SIZE_DEFAULT,
@@ -55,6 +56,12 @@ const petSizeInput = document.querySelector<HTMLInputElement>("#pet-size");
 const petSizeValue =
   document.querySelector<HTMLOutputElement>("#pet-size-value");
 const petSizeStatus = document.querySelector<HTMLElement>("#pet-size-status");
+const updateCard = document.querySelector<HTMLElement>("#update-card");
+const updateStatus = document.querySelector<HTMLElement>("#update-status");
+const checkUpdatesButton =
+  document.querySelector<HTMLButtonElement>("#check-updates");
+const viewUpdateButton =
+  document.querySelector<HTMLButtonElement>("#view-update");
 
 const configurationControls = [
   taskInput,
@@ -128,6 +135,14 @@ quitButton?.addEventListener("click", () => {
   void quitApp();
 });
 
+checkUpdatesButton?.addEventListener("click", () => {
+  void checkForUpdates();
+});
+
+viewUpdateButton?.addEventListener("click", () => {
+  void openUpdateRelease();
+});
+
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     void sessionApi?.requestWindowAction("hide-settings");
@@ -196,6 +211,15 @@ try {
   showError(errorMessage(error, "Could not prepare local preference saves."));
 }
 
+let unsubscribeFromUpdateStatus: (() => void) | undefined;
+try {
+  unsubscribeFromUpdateStatus = sessionApi?.onUpdateStatusChanged((status) => {
+    renderUpdateStatus(status);
+  });
+} catch {
+  renderUpdateUnavailable();
+}
+
 void loadInitialState();
 
 async function loadInitialState(): Promise<void> {
@@ -203,6 +227,7 @@ async function loadInitialState(): Promise<void> {
     refreshApplications(),
     loadSessionSnapshot(),
     loadPetWindowPreferences(),
+    loadUpdateStatus(),
   ]);
   await loadSessionPreferences();
   preferencesReady = true;
@@ -211,6 +236,85 @@ async function loadInitialState(): Promise<void> {
   if (loadedPreferences && currentSnapshot?.capabilities.canStart) {
     applySavedPreferences(loadedPreferences);
   }
+}
+
+async function loadUpdateStatus(): Promise<void> {
+  if (!sessionApi) {
+    if (updateStatus) updateStatus.textContent = "Browser preview";
+    return;
+  }
+
+  try {
+    renderUpdateStatus(await sessionApi.getUpdateStatus());
+  } catch {
+    renderUpdateUnavailable();
+  }
+}
+
+async function checkForUpdates(): Promise<void> {
+  if (!sessionApi) return;
+  try {
+    renderUpdateStatus(await sessionApi.checkForUpdates());
+  } catch {
+    renderUpdateUnavailable();
+  }
+}
+
+async function openUpdateRelease(): Promise<void> {
+  if (!sessionApi) return;
+  try {
+    await sessionApi.openUpdateRelease();
+  } catch {
+    if (updateStatus) {
+      updateStatus.textContent =
+        "The release page couldn’t be opened. Check again and retry.";
+    }
+  }
+}
+
+function renderUpdateStatus(status: UpdateStatus): void {
+  if (updateCard) updateCard.dataset.updatePhase = status.phase;
+  if (checkUpdatesButton) {
+    checkUpdatesButton.disabled = status.phase === "checking";
+    checkUpdatesButton.textContent =
+      status.phase === "checking"
+        ? "Checking…"
+        : status.phase === "not-checked"
+          ? "Check now"
+          : "Check again";
+  }
+  if (viewUpdateButton) {
+    viewUpdateButton.hidden = status.phase !== "available";
+  }
+  if (!updateStatus) return;
+
+  switch (status.phase) {
+    case "not-checked":
+      updateStatus.textContent = `Version ${status.currentVersion}. An automatic check will run shortly.`;
+      break;
+    case "checking":
+      updateStatus.textContent = "Checking GitHub for a newer release…";
+      break;
+    case "up-to-date":
+      updateStatus.textContent = `Version ${status.currentVersion} is up to date.`;
+      break;
+    case "available":
+      updateStatus.textContent = `Version ${status.latestVersion} is ready. Review and install it from GitHub.`;
+      break;
+    case "error":
+      updateStatus.textContent =
+        "Couldn’t reach GitHub. Focus sessions still work normally; try again later.";
+      break;
+  }
+}
+
+function renderUpdateUnavailable(): void {
+  if (updateCard) updateCard.dataset.updatePhase = "error";
+  if (updateStatus) {
+    updateStatus.textContent = "Update checks are unavailable in this build.";
+  }
+  if (checkUpdatesButton) checkUpdatesButton.disabled = true;
+  if (viewUpdateButton) viewUpdateButton.hidden = true;
 }
 
 async function loadPetWindowPreferences(): Promise<void> {
@@ -1114,5 +1218,6 @@ window.addEventListener("beforeunload", () => {
   }
   unsubscribeFromSession?.();
   unsubscribeFromPreferencesFlush?.();
+  unsubscribeFromUpdateStatus?.();
   stopFocusDisplayTimer();
 });

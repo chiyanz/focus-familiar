@@ -95,3 +95,17 @@ body {
   font-size: 0.72em;
   letter-spacing: -0.08em;
 }
+
+.update-badge {
+  display: none;
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #d77962;
+  box-shadow: 0 0 0 3px rgb(215 121 98 / 16%);
+}
+
+.hint[data-update-available="true"] .update-badge {
+  display: block;
+}

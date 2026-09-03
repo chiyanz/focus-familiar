@@ -2,6 +2,8 @@ import { constants } from "node:fs";
 import { access, readFile } from "node:fs/promises";
 import process from "node:process";
 
+import { resolvePackageVersionMetadata } from "./package-version.mjs";
+
 const packageJson = JSON.parse(
   await readFile(new URL("../package.json", import.meta.url), "utf8"),
 );
@@ -24,6 +26,14 @@ const missingScripts = requiredScripts.filter(
   (script) => !packageJson.scripts?.[script],
 );
 const errors = [];
+
+try {
+  resolvePackageVersionMetadata(packageJson);
+} catch (error) {
+  errors.push(
+    error instanceof Error ? error.message : "invalid version metadata",
+  );
+}
 
 if (missingScripts.length > 0) {
   errors.push(`missing scripts: ${missingScripts.join(", ")}`);

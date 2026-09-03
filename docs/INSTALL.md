@@ -10,7 +10,7 @@ GitHub release. With both files in Downloads, open Terminal and run:
 
 ```bash
 cd ~/Downloads
-shasum -a 256 -c focus-familiar-0.1.0-macos-arm64.zip.sha256
+shasum -a 256 -c focus-familiar-0.1.0-macos-arm64-local-adhoc.zip.sha256
 ```
 
 The result should say `OK`. This confirms that the download matches the file
@@ -56,6 +56,21 @@ workflow and will not require this fallback.
 Focus Familiar observes only foreground application identity. It does not read
 keystrokes, source code, screenshots, browser content, clipboard data, or
 document contents. Settings and safe paused-session recovery remain on the Mac.
+
+## Update notices
+
+Packaged builds check GitHub Releases shortly after launch and every twelve
+hours while open. When a newer version exists, the pet's settings pill shows a
+small badge and the settings window offers **View release**. There is also a
+manual **Check now** button.
+
+The request includes the current app version, never tasks, session timing, or
+foreground-application data. GitHub receives the normal request IP address and
+user agent. Focus sessions continue to work offline.
+
+Updates are not downloaded or installed automatically in the prototype. Verify
+the new checksum, quit Focus Familiar, and replace the old app in Applications
+using the same steps above. Existing local settings are preserved.
 
 ## Uninstall
 

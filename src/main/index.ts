@@ -8,12 +8,15 @@ import {
   BrowserWindow,
   dialog,
   ipcMain,
+  net,
   screen,
+  shell,
   type MessageBoxOptions,
 } from "electron";
 
 import {
   publishSessionSnapshot,
+  publishUpdateStatus,
   registerIpcHandlers,
   type ManagedWindow,
 } from "./ipc";
@@ -42,6 +45,12 @@ import {
 } from "../core";
 import type { ActivityProvider, Clock } from "../platform/application";
 import { IPC_EVENTS } from "../shared/ipc";
+import {
+  githubReleasePageUrl,
+  GitHubReleaseSource,
+  UpdateChecker,
+} from "./update-checker";
+import { UpdateCheckScheduler } from "./update-check-scheduler";
 
 const moduleDirectory = dirname(fileURLToPath(import.meta.url));
 const preloadPath = join(moduleDirectory, "../preload/index.cjs");
@@ -54,6 +63,9 @@ let sessionRuntime: SessionRuntime | undefined;
 let applicationProvider: ActivityProvider | undefined;
 let runtimeClock: Clock | undefined;
 let localSettings: LocalSettingsService | undefined;
+let updateChecker: UpdateChecker | undefined;
+let unsubscribeFromUpdateChecker: (() => void) | undefined;
+let automaticUpdateChecks: UpdateCheckScheduler | undefined;
 let restoredRecovery: PausedSessionRecovery | null = null;
 let quitPreparation: Promise<void> | undefined;
 let isReadyToQuit = false;
@@ -79,6 +91,7 @@ if (!app.requestSingleInstanceLock()) {
   app
     .whenReady()
     .then(async () => {
+      createUpdateChecker();
       removeIpcHandlers = registerIpcHandlers({
         app,
         ipcMain,
@@ -86,6 +99,16 @@ if (!app.requestSingleInstanceLock()) {
         getApplicationProvider: () => applicationProvider,
         getSessionController: () => sessionRuntime,
         getSettingsController: () => localSettings,
+        getUpdateController: () => {
+          const checker = updateChecker;
+          return checker
+            ? {
+                snapshot: () => checker.snapshot(),
+                check: () => checker.check(),
+                openAvailableRelease,
+              }
+            : undefined;
+        },
         getPetWindowSize: () =>
           localSettings?.petWindowPreferences().petWindowSize,
         setPetWindowSize: updatePetWindowSize,
@@ -104,6 +127,7 @@ if (!app.requestSingleInstanceLock()) {
         app.quit();
       } else {
         findWindow("pet")?.showInactive();
+        startAutomaticUpdateChecks();
       }
     })
     .catch((error: unknown) => {
@@ -127,6 +151,7 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.on("before-quit", (event) => {
+    automaticUpdateChecks?.dispose();
     if (isReadyToQuit) {
       isQuitting = true;
       sessionRuntime?.dispose();
@@ -150,8 +175,48 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.on("will-quit", () => {
+    unsubscribeFromUpdateChecker?.();
     removeIpcHandlers?.();
   });
+}
+
+function createUpdateChecker(): void {
+  const currentVersion = app.getVersion();
+  updateChecker = new UpdateChecker(
+    currentVersion,
+    new GitHubReleaseSource(
+      (url, init) =>
+        net.fetch(url, {
+          method: "GET",
+          headers: init.headers,
+          signal: init.signal,
+          redirect: "error",
+        }),
+      currentVersion,
+    ),
+    (error) => console.warn(`Update check unavailable: ${error.message}`),
+  );
+  unsubscribeFromUpdateChecker = updateChecker.subscribe((status) => {
+    publishUpdateStatus(managedWindows, status);
+  });
+}
+
+function startAutomaticUpdateChecks(): void {
+  if (!app.isPackaged || isSmokeTest || isQuitting) return;
+  const checker = updateChecker;
+  if (!checker) return;
+  automaticUpdateChecks = new UpdateCheckScheduler(
+    () => checker.check(),
+    undefined,
+    (error) => console.warn(`Automatic update check failed: ${error.message}`),
+  );
+  automaticUpdateChecks.start();
+}
+
+async function openAvailableRelease(): Promise<void> {
+  const tag = updateChecker?.availableReleaseTag();
+  if (!tag) throw new Error("No newer release is available.");
+  await shell.openExternal(githubReleasePageUrl(tag));
 }
 
 async function loadLocalSettings(): Promise<void> {
@@ -383,6 +448,8 @@ async function verifySmokeBoundary(): Promise<void> {
     const initialPetBounds = findWindow("pet")?.getBounds();
     const sessionResult = await settingsWindow.webContents.executeJavaScript(`
       (async () => {
+        const appInfo = await window.focusFamiliar.getAppInfo();
+        const updateStatus = await window.focusFamiliar.getUpdateStatus();
         const initial = await window.focusFamiliar.getSessionSnapshot();
         const initialPreferences = await window.focusFamiliar.getSessionPreferences();
         const initialPetWindowPreferences = await window.focusFamiliar.getPetWindowPreferences();
@@ -421,6 +488,11 @@ async function verifySmokeBoundary(): Promise<void> {
         }
         return {
           ok: true,
+          appInfo,
+          updateStatus,
+          renderedUpdateStatus: document.querySelector("#update-status")?.textContent,
+          updateCheckEnabled: !document.querySelector("#check-updates")?.disabled,
+          updateReleaseHidden: document.querySelector("#view-update")?.hidden,
           initial,
           initialPreferences,
           initialPetWindowPreferences,
@@ -438,6 +510,12 @@ async function verifySmokeBoundary(): Promise<void> {
     `);
     if (
       !sessionResult.ok ||
+      sessionResult.appInfo.version !== "0.1.0-prototype.3" ||
+      sessionResult.updateStatus.phase !== "not-checked" ||
+      sessionResult.updateStatus.currentVersion !== "0.1.0-prototype.3" ||
+      !sessionResult.renderedUpdateStatus?.includes("0.1.0-prototype.3") ||
+      !sessionResult.updateCheckEnabled ||
+      !sessionResult.updateReleaseHidden ||
       (expectsSmokeRecovery &&
         (sessionResult.initial.phase !== "paused" ||
           sessionResult.initial.focusedMs !== 1_234 ||

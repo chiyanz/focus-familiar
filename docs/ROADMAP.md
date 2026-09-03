@@ -14,6 +14,7 @@ The roadmap is ordered to establish secure process boundaries before adding beha
 | 6        | Settings and local persistence          | In progress | [006](features/006-settings-and-persistence.md) |
 | 7        | Custom pet packs                        | Planned     | [007](features/007-custom-pet-packs.md)         |
 | 8        | Packaging and first release             | In progress | [008](features/008-packaging-and-release.md)    |
+| 9        | Update availability notices             | Implemented | [009](features/009-update-notices.md)           |
 
 ## Deferred beyond version 0.1
 

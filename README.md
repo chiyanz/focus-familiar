@@ -5,8 +5,9 @@ Focus Familiar is a local-first desktop pet for macOS that helps you stay with t
 > [!NOTE]
 > A local macOS prototype can run complete focus sessions from the settings
 > window, restores interrupted work in a paused state, and remembers the pet's
-> size and screen position. A signed release is still being completed in small,
-> reviewable slices.
+> size and screen position. Packaged builds can also notice newer GitHub
+> releases without downloading them. A signed release is still being completed
+> in small, reviewable slices.
 
 ## Version 0.1
 
@@ -41,6 +42,7 @@ The initial experience will let someone:
 - [runtime and intervention decision](docs/decisions/0004-deadline-runtime-and-reversible-intervention.md)
 - [local settings decision](docs/decisions/0005-versioned-local-settings.md)
 - [macOS distribution decision](docs/decisions/0006-developer-id-and-notarization.md)
+- [update-notice decision](docs/decisions/0007-github-update-notices.md)
 - [Development workflow](docs/DEVELOPMENT.md)
 - [Signing and notarization](docs/NOTARIZATION.md)
 - [Prototype install guide](docs/INSTALL.md)
@@ -59,6 +61,7 @@ Feature plans are living documents. A feature is only marked **Implemented** aft
 | Session persistence    | Implemented |
 | Remaining preferences  | In progress |
 | Prototype package      | In progress |
+| Update notices         | Implemented |
 | Signed GitHub release  | Planned     |
 
 The development baseline requires macOS 13 or newer and Node.js 22.
@@ -66,7 +69,7 @@ The development baseline requires macOS 13 or newer and Node.js 22.
 ## Try the prototype
 
 Download the latest Apple Silicon ZIP and checksum from
-[GitHub Releases](https://github.com/chiyanz/focus-familiar/releases/tag/v0.1.0-prototype.1),
+[GitHub Releases](https://github.com/chiyanz/focus-familiar/releases),
 then follow the [prototype install guide](docs/INSTALL.md). The prototype is
 ad-hoc signed but not yet Developer ID signed or notarized, so macOS will ask
 you to confirm its first launch.

@@ -264,14 +264,51 @@
         </div>
       </section>
 
+      <section
+        class="update-card"
+        id="update-card"
+        data-update-phase="not-checked"
+        aria-labelledby="update-title"
+      >
+        <span class="update-icon" aria-hidden="true">↻</span>
+        <div class="update-copy">
+          <p class="section-kicker">App updates</p>
+          <h2 id="update-title">Keep your familiar current.</h2>
+          <p id="update-status" role="status" aria-live="polite">
+            Focus Familiar checks GitHub for new releases after it starts.
+          </p>
+          <p class="update-privacy">
+            The request includes the app version—never tasks or activity. GitHub
+            sees normal connection details, and downloads stay manual.
+          </p>
+        </div>
+        <div class="update-actions">
+          <button
+            class="secondary-button update-button"
+            id="check-updates"
+            type="button"
+          >
+            Check now
+          </button>
+          <button
+            class="primary-button update-button"
+            id="view-update"
+            type="button"
+            hidden
+          >
+            View release
+          </button>
+        </div>
+      </section>
+
       <section class="privacy-card" aria-labelledby="privacy-title">
         <span class="privacy-icon" aria-hidden="true">◌</span>
         <div>
           <h2 id="privacy-title">Private by design</h2>
           <p>
-            Focus Familiar stays on your Mac. It observes the frontmost app
-            only; it never reads browser content, files, clipboard, screenshots,
-            or keystrokes.
+            Your focus data stays on your Mac. Focus Familiar observes the
+            frontmost app only; it never reads browser content, files,
+            clipboard, screenshots, or keystrokes.
           </p>
         </div>
       </section>
@@ -279,7 +316,7 @@
       <footer>
         <span id="app-version">Loading version…</span>
         <div class="footer-actions">
-          <span>macOS · local only</span>
+          <span>macOS · local-first</span>
           <button class="footer-button" id="quit-app" type="button">
             Quit app
           </button>

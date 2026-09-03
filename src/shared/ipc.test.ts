@@ -6,6 +6,7 @@ import {
   SESSION_ACTIONS,
   SESSION_INTENSITIES,
   SESSION_PHASES,
+  UPDATE_PHASES,
   WINDOW_ACTIONS,
   parseApplicationList,
   isWindowAction,
@@ -18,6 +19,7 @@ import {
   parseSessionSnapshot,
   parseSessionStartConfig,
   parseWindowAction,
+  parseUpdateStatus,
   toAppPlatform,
 } from "./ipc";
 
@@ -25,6 +27,9 @@ describe("IPC contracts", () => {
   it("keeps the channel allow-list explicit", () => {
     expect(IPC_CHANNELS).toEqual({
       getAppInfo: "app:get-info",
+      getUpdateStatus: "updates:get-status",
+      checkForUpdates: "updates:check",
+      openUpdateRelease: "updates:open-release",
       windowAction: "window:action",
       getPetWindowPreferences: "settings:get-pet-window-preferences",
       setPetWindowSize: "settings:set-pet-window-size",
@@ -38,6 +43,7 @@ describe("IPC contracts", () => {
     });
     expect(IPC_EVENTS).toEqual({
       sessionChanged: "session:changed",
+      updateStatusChanged: "updates:status-changed",
       preferencesFlushRequested: "settings:flush-requested",
     });
     expect(WINDOW_ACTIONS).toEqual([
@@ -58,6 +64,66 @@ describe("IPC contracts", () => {
       "stopped",
     ]);
     expect(SESSION_INTENSITIES).toEqual(["gentle", "balanced", "strict"]);
+    expect(UPDATE_PHASES).toEqual([
+      "not-checked",
+      "checking",
+      "up-to-date",
+      "available",
+      "error",
+    ]);
+  });
+
+  it("validates and sanitizes update status", () => {
+    expect(
+      parseUpdateStatus({
+        phase: "available",
+        currentVersion: "0.1.0-prototype.2",
+        latestVersion: "0.1.0-prototype.3",
+        releaseTag: "v0.1.0-prototype.3",
+        releaseBody: "must not cross the boundary",
+        releaseUrl: "https://example.com/untrusted",
+      }),
+    ).toEqual({
+      phase: "available",
+      currentVersion: "0.1.0-prototype.2",
+      latestVersion: "0.1.0-prototype.3",
+      releaseTag: "v0.1.0-prototype.3",
+    });
+    expect(
+      parseUpdateStatus({
+        phase: "up-to-date",
+        currentVersion: "0.1.0",
+        latestVersion: null,
+        releaseTag: null,
+      }),
+    ).toMatchObject({ phase: "up-to-date" });
+
+    for (const malformed of [
+      null,
+      { phase: "available", currentVersion: "0.1.0" },
+      {
+        phase: "up-to-date",
+        currentVersion: "0.1.0",
+        latestVersion: "1.0.0",
+        releaseTag: null,
+      },
+      {
+        phase: "unknown",
+        currentVersion: "0.1.0",
+        latestVersion: null,
+        releaseTag: null,
+      },
+      {
+        phase: "error",
+        currentVersion: "x".repeat(129),
+        latestVersion: null,
+        releaseTag: null,
+      },
+    ]) {
+      expect(() => parseUpdateStatus(malformed)).toThrow(
+        "Malformed update status.",
+      );
+    }
   });
 
   it("validates preference flush request identifiers", () => {
