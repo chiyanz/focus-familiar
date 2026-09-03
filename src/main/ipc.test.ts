@@ -177,7 +177,16 @@ describe("session IPC handlers", () => {
       if (result.ok) state = result.state;
       return result;
     });
+    let preferences = {
+      taskDraft: "",
+      targetApplication: null as typeof editor | null,
+      durationMs: config.durationMs,
+      gracePeriodMs: config.gracePeriodMs,
+      interventionAfterMs: config.interventionAfterMs,
+      intensity: config.intensity,
+    };
     const removeHandler = vi.fn();
+    const acknowledgePreferencesFlush = vi.fn();
     const dispose = registerIpcHandlers({
       app: {
         getName: () => "Focus Familiar",
@@ -202,6 +211,14 @@ describe("session IPC handlers", () => {
         resume,
         stop,
       }),
+      getSettingsController: () => ({
+        sessionPreferences: () => preferences,
+        updateSessionPreferences: async (next) => {
+          preferences = next;
+          return { ok: true };
+        },
+      }),
+      acknowledgePreferencesFlush,
       createSessionId: () => "generated-session",
     });
     const event = {
@@ -227,9 +244,26 @@ describe("session IPC handlers", () => {
     await expect(
       handlers.get("session:action")?.(event, "stop"),
     ).resolves.toMatchObject({ phase: "stopped" });
+    expect(
+      handlers.get("settings:get-session-preferences")?.(event),
+    ).toMatchObject({ taskDraft: "" });
+    await expect(
+      handlers.get("settings:save-session-preferences")?.(event, {
+        ...preferences,
+        taskDraft: "Remember me",
+        targetApplication: editor,
+      }),
+    ).resolves.toMatchObject({
+      taskDraft: "Remember me",
+      targetApplication: editor,
+    });
+    expect(
+      handlers.get("settings:acknowledge-flush")?.(event, "request-1"),
+    ).toBeUndefined();
+    expect(acknowledgePreferencesFlush).toHaveBeenCalledWith("request-1");
 
     dispose();
-    expect(removeHandler).toHaveBeenCalledTimes(6);
+    expect(removeHandler).toHaveBeenCalledTimes(9);
   });
 
   it("rejects session operations when the macOS service is unavailable", async () => {
@@ -251,6 +285,8 @@ describe("session IPC handlers", () => {
       getWindows: () => [entry],
       getApplicationProvider: () => undefined,
       getSessionController: () => undefined,
+      getSettingsController: () => undefined,
+      acknowledgePreferencesFlush: vi.fn(),
       createSessionId: () => "unused",
     });
     const event = {

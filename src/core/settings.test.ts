@@ -135,7 +135,7 @@ describe("settings parsing", () => {
     expect(result.settings).toEqual({
       schemaVersion: 1,
       preferences: {
-        taskDraft: "Ship the release",
+        taskDraft: "  Ship the release  ",
         targetApplication: editor,
         durationMs: 1_500_000,
         gracePeriodMs: 10_000,
@@ -186,7 +186,7 @@ describe("settings parsing", () => {
     expect(result.settings).toEqual({
       schemaVersion: 1,
       preferences: {
-        taskDraft: "Ship the release",
+        taskDraft: "  Ship the release  ",
         targetApplication: editor,
         durationMs: 1_500_000,
         gracePeriodMs: 10_000,
@@ -289,7 +289,7 @@ describe("settings parsing", () => {
 
     expect(result.settings.preferences).toEqual(
       expect.objectContaining({
-        taskDraft: "keep this",
+        taskDraft: "  keep this  ",
         targetApplication: null,
         durationMs: DEFAULT_SETTINGS_PREFERENCES.durationMs,
         gracePeriodMs: DEFAULT_SETTINGS_PREFERENCES.gracePeriodMs,

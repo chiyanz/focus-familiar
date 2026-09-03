@@ -11,6 +11,8 @@ import {
   isWindowAction,
   parseAppInfo,
   parseSessionAction,
+  parsePreferencesFlushRequestId,
+  parseSessionPreferences,
   parseSessionSnapshot,
   parseSessionStartConfig,
   parseWindowAction,
@@ -26,8 +28,14 @@ describe("IPC contracts", () => {
       getSessionSnapshot: "session:get",
       startSession: "session:start",
       sessionAction: "session:action",
+      getSessionPreferences: "settings:get-session-preferences",
+      saveSessionPreferences: "settings:save-session-preferences",
+      acknowledgePreferencesFlush: "settings:acknowledge-flush",
     });
-    expect(IPC_EVENTS).toEqual({ sessionChanged: "session:changed" });
+    expect(IPC_EVENTS).toEqual({
+      sessionChanged: "session:changed",
+      preferencesFlushRequested: "settings:flush-requested",
+    });
     expect(WINDOW_ACTIONS).toEqual([
       "show-settings",
       "hide-settings",
@@ -46,6 +54,16 @@ describe("IPC contracts", () => {
       "stopped",
     ]);
     expect(SESSION_INTENSITIES).toEqual(["gentle", "balanced", "strict"]);
+  });
+
+  it("validates preference flush request identifiers", () => {
+    expect(parsePreferencesFlushRequestId("request-1")).toBe("request-1");
+    expect(() => parsePreferencesFlushRequestId("")).toThrow(
+      "Malformed preferences flush request.",
+    );
+    expect(() => parsePreferencesFlushRequestId(42)).toThrow(
+      "Malformed preferences flush request.",
+    );
   });
 
   it("accepts only documented window actions", () => {
@@ -135,6 +153,68 @@ describe("IPC contracts", () => {
         intensity: "gentle",
       }),
     ).toThrow("Duration must be a positive integer number of milliseconds.");
+  });
+
+  it("validates session preferences while preserving the task draft", () => {
+    expect(
+      parseSessionPreferences({
+        taskDraft: "  Finish the prototype  ",
+        targetApplication: {
+          bundleId: "com.microsoft.VSCode",
+          name: "  Visual Studio Code ",
+        },
+        durationMs: 25 * 60 * 1000,
+        gracePeriodMs: 20 * 1000,
+        interventionAfterMs: 90 * 1000,
+        intensity: "balanced",
+        recovery: { secret: "must not cross the boundary" },
+        soundEnabled: true,
+      }),
+    ).toEqual({
+      taskDraft: "  Finish the prototype  ",
+      targetApplication: {
+        bundleId: "com.microsoft.VSCode",
+        name: "Visual Studio Code",
+      },
+      durationMs: 25 * 60 * 1000,
+      gracePeriodMs: 20 * 1000,
+      interventionAfterMs: 90 * 1000,
+      intensity: "balanced",
+    });
+
+    expect(
+      parseSessionPreferences({
+        taskDraft: "",
+        targetApplication: null,
+        durationMs: 1,
+        gracePeriodMs: 0,
+        interventionAfterMs: 1,
+        intensity: "gentle",
+      }),
+    ).toMatchObject({ taskDraft: "", targetApplication: null });
+    expect(() => parseSessionPreferences(null)).toThrow(
+      "Preferences must be an object.",
+    );
+    expect(() =>
+      parseSessionPreferences({
+        taskDraft: 42,
+        targetApplication: null,
+        durationMs: 1,
+        gracePeriodMs: 0,
+        interventionAfterMs: 1,
+        intensity: "gentle",
+      }),
+    ).toThrow("Task draft must be a string.");
+    expect(() =>
+      parseSessionPreferences({
+        taskDraft: "Task",
+        targetApplication: null,
+        durationMs: 1,
+        gracePeriodMs: 10,
+        interventionAfterMs: 10,
+        intensity: "gentle",
+      }),
+    ).toThrow("Intervention threshold must be greater than the grace period.");
   });
 
   it("validates application lists and returns fresh summaries", () => {

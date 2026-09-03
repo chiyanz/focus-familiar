@@ -16,6 +16,7 @@ import {
   registerIpcHandlers,
   type ManagedWindow,
 } from "./ipc";
+import { LocalSettingsService } from "./local-settings-service";
 import { resolveMacOSActivityHelperPath } from "./native-helper";
 import { SessionRuntime } from "./session-runtime";
 import {
@@ -30,16 +31,31 @@ import {
 } from "./windows";
 import { ChildProcessNativeHelperRunner } from "../platform/macos/helper-runner";
 import { MacOSApplicationAdapter } from "../platform/macos/macos-application-adapter";
-import type { ActivityProvider } from "../platform/application";
+import {
+  createPausedSessionFromRecovery,
+  type PausedSessionRecovery,
+} from "../core";
+import type { ActivityProvider, Clock } from "../platform/application";
+import { IPC_EVENTS } from "../shared/ipc";
 
 const moduleDirectory = dirname(fileURLToPath(import.meta.url));
 const preloadPath = join(moduleDirectory, "../preload/index.cjs");
 const rendererDirectory = join(moduleDirectory, "../renderer");
 const isSmokeTest = process.argv.includes("--smoke-test");
+const expectsSmokeRecovery = process.argv.includes("--expect-recovery");
 const managedWindows: ManagedWindow[] = [];
 let isQuitting = false;
 let sessionRuntime: SessionRuntime | undefined;
 let applicationProvider: ActivityProvider | undefined;
+let runtimeClock: Clock | undefined;
+let localSettings: LocalSettingsService | undefined;
+let restoredRecovery: PausedSessionRecovery | null = null;
+let quitPreparation: Promise<void> | undefined;
+let isReadyToQuit = false;
+let didShowCheckpointFailure = false;
+let pendingPreferencesFlush:
+  | { readonly requestId: string; readonly resolve: () => void }
+  | undefined;
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -61,6 +77,8 @@ if (!app.requestSingleInstanceLock()) {
         getWindows: () => managedWindows,
         getApplicationProvider: () => applicationProvider,
         getSessionController: () => sessionRuntime,
+        getSettingsController: () => localSettings,
+        acknowledgePreferencesFlush: acknowledgePreferencesFlush,
         createSessionId: randomUUID,
       });
 
@@ -97,9 +115,27 @@ if (!app.requestSingleInstanceLock()) {
     if (process.platform !== "darwin") app.quit();
   });
 
-  app.on("before-quit", () => {
+  app.on("before-quit", (event) => {
+    if (isReadyToQuit) {
+      isQuitting = true;
+      sessionRuntime?.dispose();
+      return;
+    }
+
+    event.preventDefault();
+    if (quitPreparation) return;
     isQuitting = true;
-    sessionRuntime?.dispose();
+    quitPreparation = prepareToQuit()
+      .catch((error: unknown) => {
+        console.error(
+          "Focus Familiar could not finish its quit checkpoint.",
+          error,
+        );
+      })
+      .finally(() => {
+        isReadyToQuit = true;
+        app.quit();
+      });
   });
 
   app.on("will-quit", () => {
@@ -108,10 +144,11 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 async function loadLocalSettings(): Promise<void> {
-  const repository = new SettingsRepository(
-    resolveSettingsFilePath(app.getPath("userData")),
+  localSettings = new LocalSettingsService(
+    new SettingsRepository(resolveSettingsFilePath(app.getPath("userData"))),
   );
-  const loaded = await repository.load();
+  const loaded = await localSettings.load();
+  restoredRecovery = loaded.restoredRecovery;
 
   if (!loaded.ok) {
     console.error(`Local settings unavailable: ${loaded.error.message}`);
@@ -198,9 +235,23 @@ async function verifySmokeBoundary(): Promise<void> {
     if (!settingsWindow) throw new Error("Settings window is unavailable.");
     const sessionResult = await settingsWindow.webContents.executeJavaScript(`
       (async () => {
+        const initial = await window.focusFamiliar.getSessionSnapshot();
+        const initialPreferences = await window.focusFamiliar.getSessionPreferences();
+        const initialSelectedTarget = document.querySelector("#target-application")?.value;
+        if (initial.phase === "paused") {
+          await window.focusFamiliar.requestSessionAction("stop");
+        }
         const applications = await window.focusFamiliar.listApplications();
         const targetApplication = applications[0];
         if (!targetApplication) return { ok: false, reason: "no-applications" };
+        const savedPreferences = await window.focusFamiliar.saveSessionPreferences({
+          taskDraft: "Saved smoke draft",
+          targetApplication,
+          durationMs: 60000,
+          gracePeriodMs: 1000,
+          interventionAfterMs: 3000,
+          intensity: "balanced"
+        });
         const started = await window.focusFamiliar.startSession({
           task: "Verify the packaged prototype",
           targetApplication,
@@ -213,8 +264,17 @@ async function verifySmokeBoundary(): Promise<void> {
         const resumed = await window.focusFamiliar.requestSessionAction("resume");
         const stopped = await window.focusFamiliar.requestSessionAction("stop");
         await new Promise((resolve) => setTimeout(resolve, 0));
+        const taskInput = document.querySelector("#task");
+        if (taskInput instanceof HTMLInputElement) {
+          taskInput.value = "Flushed during quit";
+          taskInput.dispatchEvent(new Event("input", { bubbles: true }));
+        }
         return {
           ok: true,
+          initial,
+          initialPreferences,
+          initialSelectedTarget,
+          savedPreferences,
           applicationCount: applications.length,
           phases: [started.phase, paused.phase, resumed.phase, stopped.phase],
           renderedStatus: document.querySelector("#status-label")?.textContent,
@@ -226,6 +286,14 @@ async function verifySmokeBoundary(): Promise<void> {
     `);
     if (
       !sessionResult.ok ||
+      (expectsSmokeRecovery &&
+        (sessionResult.initial.phase !== "paused" ||
+          sessionResult.initial.focusedMs !== 1_234 ||
+          sessionResult.initialSelectedTarget !==
+            "com.example.RecoveredEditor" ||
+          sessionResult.initialPreferences.taskDraft !==
+            "Recovered smoke draft")) ||
+      sessionResult.savedPreferences.taskDraft !== "Saved smoke draft" ||
       sessionResult.applicationCount < 1 ||
       sessionResult.phases[1] !== "paused" ||
       sessionResult.phases[3] !== "stopped" ||
@@ -251,9 +319,10 @@ async function verifySmokeBoundary(): Promise<void> {
 async function startApplicationAwareness(): Promise<void> {
   if (process.platform !== "darwin") return;
 
-  const clock = {
+  const clock: Clock = {
     nowMs: (): number => Math.floor(performance.timeOrigin + performance.now()),
   };
+  runtimeClock = clock;
   const helperPath = resolveMacOSActivityHelperPath({
     appPath: app.getAppPath(),
     resourcesPath: process.resourcesPath,
@@ -264,6 +333,9 @@ async function startApplicationAwareness(): Promise<void> {
     new ChildProcessNativeHelperRunner(helperPath),
     clock,
   );
+  const initialState = restoredRecovery
+    ? createPausedSessionFromRecovery(restoredRecovery, clock.nowMs())
+    : null;
   applicationProvider = activityAdapter;
   sessionRuntime = new SessionRuntime(
     activityAdapter,
@@ -274,7 +346,25 @@ async function startApplicationAwareness(): Promise<void> {
       cancel: (handle) => clearTimeout(handle),
     },
     {
-      onStateChanged: (state) => publishSessionSnapshot(managedWindows, state),
+      ...(initialState ? { initialState } : {}),
+      onStateChanged: (state) => {
+        publishSessionSnapshot(managedWindows, state);
+        const checkpoint = localSettings?.checkpointSession(
+          state,
+          clock.nowMs(),
+        );
+        void checkpoint?.then((result) => {
+          if (result.ok || didShowCheckpointFailure) return;
+          didShowCheckpointFailure = true;
+          console.error(
+            `Session recovery unavailable: ${result.error.message}`,
+          );
+          showRuntimeNotice(
+            "Session recovery is unavailable",
+            "Focus Familiar can keep running, but this session may not be recoverable after the app closes.",
+          );
+        });
+      },
       onRuntimeError: (error) => {
         console.error(`Focus runtime unavailable: ${error.message}`);
         showRuntimeNotice(
@@ -301,6 +391,54 @@ async function startApplicationAwareness(): Promise<void> {
       );
     }
   }
+}
+
+async function prepareToQuit(): Promise<void> {
+  await flushRendererPreferences();
+
+  const runtime = sessionRuntime;
+  const settings = localSettings;
+  const clock = runtimeClock;
+  if (runtime && settings && clock) {
+    const state = runtime.snapshot();
+    const shouldPause =
+      state.phase === "focused" ||
+      state.phase === "grace" ||
+      state.phase === "nudge" ||
+      state.phase === "intervention";
+    const finalState = shouldPause ? runtime.pause().state : state;
+    const saved = await settings.checkpointSession(finalState, clock.nowMs());
+    if (!saved.ok) {
+      console.error(`Final session recovery failed: ${saved.error.message}`);
+    }
+    await settings.flush();
+  }
+  runtime?.dispose();
+}
+
+async function flushRendererPreferences(): Promise<void> {
+  const settings = findWindow("settings");
+  if (!settings || settings.isDestroyed()) return;
+
+  const requestId = randomUUID();
+  await new Promise<void>((resolve) => {
+    const finish = (): void => {
+      clearTimeout(timeout);
+      if (pendingPreferencesFlush?.requestId === requestId) {
+        pendingPreferencesFlush = undefined;
+      }
+      resolve();
+    };
+
+    pendingPreferencesFlush = { requestId, resolve: finish };
+    const timeout = setTimeout(finish, 1_500);
+    settings.webContents.send(IPC_EVENTS.preferencesFlushRequested, requestId);
+  });
+}
+
+function acknowledgePreferencesFlush(requestId: string): void {
+  if (pendingPreferencesFlush?.requestId !== requestId) return;
+  pendingPreferencesFlush.resolve();
 }
 
 function showRuntimeNotice(message: string, detail: string): void {

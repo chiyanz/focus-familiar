@@ -1,16 +1,20 @@
 import type {
   ApplicationSummary,
-  FocusFamiliarApi,
   SessionAction,
   SessionPhase,
+  SessionPreferences,
   SessionSnapshot,
   SessionStartConfig,
 } from "../shared/ipc";
+import {
+  areSessionPreferencesEqual,
+  DEFAULT_SESSION_PREFERENCES,
+  preferencesFromConfig,
+} from "./session-preferences";
 
 import "./settings.css";
 
-const sessionApi: FocusFamiliarApi | undefined = (window as Partial<Window>)
-  .focusFamiliar;
+const sessionApi = (window as Partial<Window>).focusFamiliar;
 
 const versionLabel = document.querySelector<HTMLElement>("#app-version");
 const closeButton =
@@ -41,6 +45,7 @@ const focusProgress =
   document.querySelector<HTMLProgressElement>("#focus-progress");
 const statusDetail = document.querySelector<HTMLElement>("#status-detail");
 const formError = document.querySelector<HTMLElement>("#form-error");
+const saveStatus = document.querySelector<HTMLElement>("#save-status");
 
 const configurationControls = [
   taskInput,
@@ -78,6 +83,15 @@ let focusDisplayStartedAtMs = 0;
 let focusDisplayBaseMs = 0;
 let focusDisplayDurationMs = 0;
 let focusDisplaySessionId: string | null = null;
+let preferencesReady = false;
+let loadedPreferences: SessionPreferences | undefined;
+let lastSavedPreferences: SessionPreferences = {
+  ...DEFAULT_SESSION_PREFERENCES,
+};
+let saveTimer: number | undefined;
+let saveGeneration = 0;
+let pendingPreferences: SessionPreferences | undefined;
+let inFlightSave: Promise<boolean> | undefined;
 
 if (sessionApi) {
   void sessionApi
@@ -97,7 +111,7 @@ closeButton?.addEventListener("click", () => {
 });
 
 quitButton?.addEventListener("click", () => {
-  void sessionApi?.requestWindowAction("quit");
+  void quitApp();
 });
 
 document.addEventListener("keydown", (event) => {
@@ -129,6 +143,18 @@ durationInput?.addEventListener("input", () => {
   if (currentSnapshot?.capabilities.canStart) renderIdlePreview();
 });
 
+for (const control of [
+  taskInput,
+  targetSelect,
+  durationInput,
+  intensitySelect,
+  graceInput,
+  interventionInput,
+]) {
+  control?.addEventListener("input", schedulePreferencesSave);
+  control?.addEventListener("change", schedulePreferencesSave);
+}
+
 let unsubscribeFromSession: (() => void) | undefined;
 try {
   unsubscribeFromSession = sessionApi?.onSessionChanged((snapshot) => {
@@ -138,10 +164,45 @@ try {
   showError(errorMessage(error, "Live session updates are unavailable."));
 }
 
+let unsubscribeFromPreferencesFlush: (() => void) | undefined;
+try {
+  unsubscribeFromPreferencesFlush = sessionApi?.onPreferencesFlushRequested(
+    flushPendingPreferences,
+  );
+} catch (error: unknown) {
+  showError(errorMessage(error, "Could not prepare local preference saves."));
+}
+
 void loadInitialState();
 
 async function loadInitialState(): Promise<void> {
   await Promise.all([refreshApplications(), loadSessionSnapshot()]);
+  await loadSessionPreferences();
+  preferencesReady = true;
+  if (currentSnapshot) applySnapshot(currentSnapshot);
+  else renderIdlePreview();
+  if (loadedPreferences && currentSnapshot?.capabilities.canStart) {
+    applySavedPreferences(loadedPreferences);
+  }
+}
+
+async function loadSessionPreferences(): Promise<void> {
+  if (!sessionApi) {
+    preferencesReady = true;
+    setSaveStatus("Browser preview", "idle");
+    return;
+  }
+
+  try {
+    const loaded = await sessionApi.getSessionPreferences();
+    loadedPreferences = loaded;
+    lastSavedPreferences = { ...loaded };
+    setSaveStatus("Saved locally", "saved");
+  } catch (error: unknown) {
+    preferencesReady = true;
+    setSaveStatus("Couldn’t load locally", "error");
+    showError(errorMessage(error, "Saved preferences could not be loaded."));
+  }
 }
 
 async function loadSessionSnapshot(): Promise<void> {
@@ -170,6 +231,9 @@ async function refreshApplications(): Promise<void> {
   }
 
   const previousSelection = targetSelect?.value ?? "";
+  const previousApplication = previousSelection
+    ? applications.get(previousSelection)
+    : undefined;
   if (!sessionApi) {
     renderApplicationOptions(previousSelection);
     showError(
@@ -184,12 +248,23 @@ async function refreshApplications(): Promise<void> {
   }
   try {
     const runningApplications = await sessionApi.listApplications();
+    const activeApplication = currentSnapshot?.targetApplication;
+    const applicationToPreserve = activeApplication ?? previousApplication;
+    const preferredBundleId =
+      activeApplication?.bundleId ?? targetSelect?.value ?? previousSelection;
+
     applications.clear();
     for (const application of runningApplications) {
       if (!isApplication(application)) continue;
       applications.set(application.bundleId, application);
     }
-    renderApplicationOptions(previousSelection);
+    if (
+      applicationToPreserve &&
+      !applications.has(applicationToPreserve.bundleId)
+    ) {
+      applications.set(applicationToPreserve.bundleId, applicationToPreserve);
+    }
+    renderApplicationOptions(preferredBundleId);
     if (applications.size === 0) {
       showError(
         "No running applications were found. Open your focus app and refresh.",
@@ -229,6 +304,10 @@ function renderApplicationOptions(preferredBundleId: string): void {
   const sortedApplications = [...applications.values()].sort((a, b) =>
     a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
   );
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = "Choose an app…";
+  targetSelect.append(placeholder);
   for (const application of sortedApplications) {
     const option = document.createElement("option");
     option.value = application.bundleId;
@@ -269,7 +348,16 @@ async function startSession(): Promise<void> {
     return;
   }
 
-  setActionInFlight(startButton, "Starting…");
+  setActionInFlight(startButton, "Saving…");
+  const saved = await savePreferencesBeforeStart(
+    preferencesFromConfig(request.config),
+  );
+  if (!saved) {
+    clearActionInFlight(startButton, "Start focus");
+    return;
+  }
+
+  if (startButton) startButton.textContent = "Starting…";
   try {
     const snapshot = await sessionApi.startSession(request.config);
     applySnapshot(snapshot);
@@ -398,41 +486,216 @@ function readSessionConfig():
   };
 }
 
+function applySavedPreferences(preferences: SessionPreferences): void {
+  if (taskInput) taskInput.value = preferences.taskDraft;
+  if (
+    preferences.targetApplication &&
+    applications.has(preferences.targetApplication.bundleId)
+  ) {
+    renderApplicationOptions(preferences.targetApplication.bundleId);
+  } else if (targetSelect) {
+    renderApplicationOptions(targetSelect.value);
+    targetSelect.value = "";
+  }
+  if (durationInput) {
+    durationInput.value = String(
+      Math.max(1, Math.round(preferences.durationMs / 60_000)),
+    );
+  }
+  if (graceInput) {
+    graceInput.value = String(
+      Math.max(0, Math.round(preferences.gracePeriodMs / 1_000)),
+    );
+  }
+  if (interventionInput) {
+    interventionInput.value = String(
+      Math.max(1, Math.round(preferences.interventionAfterMs / 1_000)),
+    );
+  }
+  if (intensitySelect) intensitySelect.value = preferences.intensity;
+  if (currentSnapshot?.phase === "idle") renderIdlePreview();
+}
+
+function readSessionPreferences():
+  | { readonly ok: true; readonly preferences: SessionPreferences }
+  | { readonly ok: false; readonly message: string } {
+  const durationMinutes = readInteger(durationInput?.value, 1, 480);
+  if (durationMinutes === undefined) {
+    return {
+      ok: false,
+      message: "Focus time must be a whole number of minutes from 1 to 480.",
+    };
+  }
+
+  const graceSeconds = readInteger(graceInput?.value, 0, 3_600);
+  if (graceSeconds === undefined) {
+    return {
+      ok: false,
+      message: "Gentle grace must be a whole number of seconds from 0 to 3600.",
+    };
+  }
+
+  const interventionSeconds = readInteger(interventionInput?.value, 1, 7_200);
+  if (interventionSeconds === undefined) {
+    return {
+      ok: false,
+      message: "Return time must be a whole number of seconds from 1 to 7200.",
+    };
+  }
+  if (interventionSeconds <= graceSeconds) {
+    return {
+      ok: false,
+      message: "Return time must be longer than the gentle grace period.",
+    };
+  }
+
+  const intensity = intensitySelect?.value;
+  if (
+    intensity !== "gentle" &&
+    intensity !== "balanced" &&
+    intensity !== "strict"
+  ) {
+    return { ok: false, message: "Choose a valid reminder mood." };
+  }
+
+  const targetApplication = targetSelect?.value
+    ? (applications.get(targetSelect.value) ?? null)
+    : null;
+  return {
+    ok: true,
+    preferences: {
+      taskDraft: taskInput?.value ?? "",
+      targetApplication,
+      durationMs: durationMinutes * 60_000,
+      gracePeriodMs: graceSeconds * 1_000,
+      interventionAfterMs: interventionSeconds * 1_000,
+      intensity,
+    },
+  };
+}
+
+function schedulePreferencesSave(): void {
+  if (
+    !preferencesReady ||
+    !sessionApi ||
+    (currentSnapshot !== undefined && !currentSnapshot.capabilities.canStart)
+  ) {
+    return;
+  }
+
+  clearSaveTimer();
+  const result = readSessionPreferences();
+  if (!result.ok) {
+    pendingPreferences = undefined;
+    saveGeneration += 1;
+    setSaveStatus("Not saved yet", "error");
+    return;
+  }
+  if (areSessionPreferencesEqual(result.preferences, lastSavedPreferences)) {
+    pendingPreferences = undefined;
+    saveGeneration += 1;
+    setSaveStatus("Saved locally", "saved");
+    return;
+  }
+
+  pendingPreferences = result.preferences;
+  const generation = ++saveGeneration;
+  setSaveStatus("Saving…", "saving");
+  saveTimer = window.setTimeout(() => {
+    saveTimer = undefined;
+    const preferences = pendingPreferences;
+    pendingPreferences = undefined;
+    if (!preferences) return;
+    void persistPreferences(preferences, generation);
+  }, 500);
+}
+
+async function savePreferencesBeforeStart(
+  preferences: SessionPreferences,
+): Promise<boolean> {
+  clearSaveTimer();
+  pendingPreferences = undefined;
+  const generation = ++saveGeneration;
+  if (!sessionApi) return false;
+
+  if (inFlightSave) await inFlightSave;
+  if (currentSnapshot && !currentSnapshot.capabilities.canStart) {
+    showError("The session became active before its preferences were saved.");
+    return false;
+  }
+  return persistPreferences(preferences, generation);
+}
+
+async function persistPreferences(
+  preferences: SessionPreferences,
+  generation: number,
+): Promise<boolean> {
+  if (!sessionApi) return false;
+  if (currentSnapshot && !currentSnapshot.capabilities.canStart) return false;
+
+  setSaveStatus("Saving…", "saving");
+  const savePromise = (async (): Promise<boolean> => {
+    try {
+      await sessionApi.saveSessionPreferences(preferences);
+      lastSavedPreferences = { ...preferences };
+      if (generation === saveGeneration)
+        setSaveStatus("Saved locally", "saved");
+      return true;
+    } catch (error: unknown) {
+      if (generation === saveGeneration) {
+        setSaveStatus("Couldn’t save locally", "error");
+        showError(
+          errorMessage(error, "Preferences could not be saved locally."),
+        );
+      }
+      return false;
+    }
+  })();
+  inFlightSave = savePromise;
+  try {
+    return await savePromise;
+  } finally {
+    if (inFlightSave === savePromise) inFlightSave = undefined;
+  }
+}
+
 function applySnapshot(snapshot: SessionSnapshot): void {
   currentSnapshot = snapshot;
   hasLoadedSession = true;
 
-  if (snapshot.task !== null && snapshot.phase !== "idle" && taskInput) {
-    taskInput.value = snapshot.task;
-  }
-  if (snapshot.targetApplication !== null) {
-    applications.set(
-      snapshot.targetApplication.bundleId,
-      snapshot.targetApplication,
-    );
-    renderApplicationOptions(snapshot.targetApplication.bundleId);
-  }
-  if (snapshot.durationMs !== null && durationInput) {
-    durationInput.value = String(Math.round(snapshot.durationMs / 60_000));
-  }
-  if (
-    snapshot.gracePeriodMs !== null &&
-    graceInput &&
-    snapshot.sessionId !== null
-  ) {
-    graceInput.value = String(Math.round(snapshot.gracePeriodMs / 1_000));
-  }
-  if (
-    snapshot.interventionAfterMs !== null &&
-    interventionInput &&
-    snapshot.sessionId !== null
-  ) {
-    interventionInput.value = String(
-      Math.round(snapshot.interventionAfterMs / 1_000),
-    );
-  }
-  if (snapshot.intensity !== null && intensitySelect) {
-    intensitySelect.value = snapshot.intensity;
+  if (!snapshot.capabilities.canStart) {
+    if (snapshot.task !== null && taskInput) {
+      taskInput.value = snapshot.task;
+    }
+    if (snapshot.targetApplication !== null) {
+      applications.set(
+        snapshot.targetApplication.bundleId,
+        snapshot.targetApplication,
+      );
+      renderApplicationOptions(snapshot.targetApplication.bundleId);
+    }
+    if (snapshot.durationMs !== null && durationInput) {
+      durationInput.value = String(Math.round(snapshot.durationMs / 60_000));
+    }
+    if (
+      snapshot.gracePeriodMs !== null &&
+      graceInput &&
+      snapshot.sessionId !== null
+    ) {
+      graceInput.value = String(Math.round(snapshot.gracePeriodMs / 1_000));
+    }
+    if (
+      snapshot.interventionAfterMs !== null &&
+      interventionInput &&
+      snapshot.sessionId !== null
+    ) {
+      interventionInput.value = String(
+        Math.round(snapshot.interventionAfterMs / 1_000),
+      );
+    }
+    if (snapshot.intensity !== null && intensitySelect) {
+      intensitySelect.value = snapshot.intensity;
+    }
   }
 
   const durationMs = snapshot.durationMs ?? readPreviewDurationMs();
@@ -570,7 +833,41 @@ function detailFor(snapshot: SessionSnapshot): string {
 
 function setConfigurationEnabled(enabled: boolean): void {
   for (const control of configurationControls) {
-    control.disabled = !enabled || actionInFlight;
+    control.disabled = !enabled || actionInFlight || !preferencesReady;
+  }
+}
+
+function clearSaveTimer(): void {
+  if (saveTimer !== undefined) {
+    window.clearTimeout(saveTimer);
+    saveTimer = undefined;
+  }
+}
+
+function setSaveStatus(
+  message: string,
+  state: "idle" | "saved" | "saving" | "error",
+): void {
+  if (!saveStatus) return;
+  saveStatus.textContent = message;
+  saveStatus.dataset.saveState = state;
+}
+
+async function quitApp(): Promise<void> {
+  await flushPendingPreferences();
+  await sessionApi?.requestWindowAction("quit");
+}
+
+async function flushPendingPreferences(): Promise<void> {
+  if (sessionApi && preferencesReady && !actionInFlight) {
+    const hasPendingSave =
+      saveTimer !== undefined ||
+      pendingPreferences !== undefined ||
+      inFlightSave !== undefined;
+    if (hasPendingSave) {
+      const draft = readSessionPreferences();
+      if (draft.ok) await savePreferencesBeforeStart(draft.preferences);
+    }
   }
 }
 
@@ -663,6 +960,8 @@ function errorMessage(error: unknown, fallback: string): string {
 }
 
 window.addEventListener("beforeunload", () => {
+  clearSaveTimer();
   unsubscribeFromSession?.();
+  unsubscribeFromPreferencesFlush?.();
   stopFocusDisplayTimer();
 });

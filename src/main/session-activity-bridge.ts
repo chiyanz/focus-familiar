@@ -16,6 +16,7 @@ import type {
 } from "../platform/application";
 
 export interface SessionActivityBridgeOptions {
+  readonly initialState?: FocusSessionState;
   readonly onStateChanged?: (state: FocusSessionState) => void;
   readonly onObservationError?: (error: PlatformError) => void;
 }
@@ -26,7 +27,7 @@ export interface SessionActivityBridgeOptions {
  * sole authority for timing and transitions.
  */
 export class SessionActivityBridge {
-  private state: FocusSessionState = createIdleSession();
+  private state: FocusSessionState;
   private observation: Disposable | undefined;
   private latestApplication:
     | (ApplicationActivityEvent & { readonly type: "application-activated" })
@@ -38,7 +39,9 @@ export class SessionActivityBridge {
     private readonly activityProvider: ActivityProvider,
     private readonly clock: Clock,
     private readonly options: SessionActivityBridgeOptions = {},
-  ) {}
+  ) {
+    this.state = options.initialState ?? createIdleSession();
+  }
 
   snapshot(): FocusSessionState {
     return this.state;

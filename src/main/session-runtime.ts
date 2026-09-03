@@ -31,6 +31,8 @@ export interface SessionRuntimeTimerDriver {
 }
 
 export interface SessionRuntimeOptions {
+  /** A validated persisted session; recovery callers must provide paused state. */
+  readonly initialState?: FocusSessionState;
   readonly onStateChanged?: (state: FocusSessionState) => void;
   readonly onRuntimeError?: (error: PlatformError) => void;
   readonly onActivationSucceeded?: (
@@ -64,6 +66,9 @@ export class SessionRuntime {
     timer: SessionRuntimeTimerDriver,
     private readonly options: SessionRuntimeOptions = {},
   ) {
+    if (options.initialState && options.initialState.phase !== "paused") {
+      throw new Error("A recovered session must start paused.");
+    }
     this.defer = options.defer ?? queueMicrotask;
     this.intervention = new InterventionCoordinator(activator, {
       ...(options.onActivationSucceeded
@@ -81,6 +86,7 @@ export class SessionRuntime {
       onSchedulingError: (error) => this.handleSchedulingError(error),
     });
     this.bridge = new SessionActivityBridge(activityProvider, clock, {
+      ...(options.initialState ? { initialState: options.initialState } : {}),
       onStateChanged: (state) => {
         // Cancel or replace stale runtime work before exposing the snapshot.
         this.scheduler.synchronize(state);

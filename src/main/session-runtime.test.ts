@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { FocusSessionConfig } from "../core";
+import {
+  createIdleSession,
+  createPausedSessionFromRecovery,
+  type FocusSessionConfig,
+} from "../core";
 import type {
   ActivityProvider,
   ApplicationActivator,
@@ -102,6 +106,56 @@ class FakeTimer implements SessionRuntimeTimerDriver {
 }
 
 describe("session runtime", () => {
+  it("restores only a paused recovery snapshot and resumes from current app", async () => {
+    const provider = new FakeActivityProvider();
+    const clock = new FakeClock();
+    clock.value = 100;
+    const paused = createPausedSessionFromRecovery(
+      {
+        sessionId: "session-restored",
+        config: strictConfig,
+        focusedMs: 2_000,
+        awayMs: 500,
+        savedAtMs: 50,
+      },
+      100,
+    );
+    if (!paused) throw new Error("Expected a valid paused recovery state.");
+    const runtime = new SessionRuntime(
+      provider,
+      new FakeActivator(),
+      clock,
+      new FakeTimer(),
+      { initialState: paused },
+    );
+
+    expect(runtime.snapshot()).toMatchObject({
+      sessionId: "session-restored",
+      phase: "paused",
+      focusedMs: 2_000,
+      awayMs: 500,
+    });
+    await runtime.resume();
+    expect(runtime.snapshot()).toMatchObject({
+      phase: "focused",
+      focusedMs: 2_000,
+      currentApplication: editor,
+    });
+  });
+
+  it("rejects a non-paused injected runtime state", () => {
+    expect(
+      () =>
+        new SessionRuntime(
+          new FakeActivityProvider(),
+          new FakeActivator(),
+          new FakeClock(),
+          new FakeTimer(),
+          { initialState: createIdleSession() },
+        ),
+    ).toThrow("must start paused");
+  });
+
   it("advances delayed timers through exact boundaries and activates strict targets once", async () => {
     const provider = new FakeActivityProvider();
     provider.current = browser;

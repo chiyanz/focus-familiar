@@ -5,6 +5,9 @@ export const IPC_CHANNELS = {
   getSessionSnapshot: "session:get",
   startSession: "session:start",
   sessionAction: "session:action",
+  getSessionPreferences: "settings:get-session-preferences",
+  saveSessionPreferences: "settings:save-session-preferences",
+  acknowledgePreferencesFlush: "settings:acknowledge-flush",
 } as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];
@@ -12,6 +15,7 @@ export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];
 /** Main-to-renderer notifications. Keep this allow-list separate from invoke channels. */
 export const IPC_EVENTS = {
   sessionChanged: "session:changed",
+  preferencesFlushRequested: "settings:flush-requested",
 } as const;
 
 export type IpcEvent = (typeof IPC_EVENTS)[keyof typeof IPC_EVENTS];
@@ -62,6 +66,17 @@ export interface AppInfo {
 export interface ApplicationSummary {
   readonly bundleId: string;
   readonly name: string;
+}
+
+/** User-editable session defaults. Recovery and other local settings stay main-process-only. */
+export interface SessionPreferences {
+  /** Preserve draft whitespace here; startSession trims the task at its boundary. */
+  readonly taskDraft: string;
+  readonly targetApplication: ApplicationSummary | null;
+  readonly durationMs: number;
+  readonly gracePeriodMs: number;
+  readonly interventionAfterMs: number;
+  readonly intensity: SessionIntensity;
 }
 
 export interface SessionStartConfig {
@@ -116,6 +131,13 @@ export interface FocusFamiliarApi {
   ) => Promise<SessionSnapshot>;
   readonly onSessionChanged: (
     listener: (snapshot: SessionSnapshot) => void,
+  ) => () => void;
+  readonly getSessionPreferences: () => Promise<SessionPreferences>;
+  readonly saveSessionPreferences: (
+    preferences: SessionPreferences,
+  ) => Promise<SessionPreferences>;
+  readonly onPreferencesFlushRequested: (
+    listener: () => void | Promise<void>,
   ) => () => void;
 }
 
@@ -183,6 +205,65 @@ export function parseSessionStartConfig(value: unknown): SessionStartConfig {
     interventionAfterMs: value.interventionAfterMs,
     intensity: value.intensity,
   };
+}
+
+/**
+ * Validate the renderer-editable session defaults. This parser intentionally
+ * preserves taskDraft verbatim (including surrounding whitespace); the start
+ * parser performs the non-empty trim when a session is actually launched.
+ */
+export function parseSessionPreferences(value: unknown): SessionPreferences {
+  if (!isRecord(value)) {
+    throw new Error("Preferences must be an object.");
+  }
+
+  if (typeof value.taskDraft !== "string") {
+    throw new Error("Task draft must be a string.");
+  }
+
+  const targetApplication = parseApplicationSummaryOrNull(
+    value.targetApplication,
+  );
+  if (targetApplication === undefined) {
+    throw new Error(
+      "Target application must be null or include a name and bundle ID.",
+    );
+  }
+  if (!isPositiveInteger(value.durationMs)) {
+    throw new Error(
+      "Duration must be a positive integer number of milliseconds.",
+    );
+  }
+  if (!isNonNegativeInteger(value.gracePeriodMs)) {
+    throw new Error("Grace period must be a non-negative integer.");
+  }
+  if (!isNonNegativeInteger(value.interventionAfterMs)) {
+    throw new Error("Intervention threshold must be a non-negative integer.");
+  }
+  if (value.interventionAfterMs <= value.gracePeriodMs) {
+    throw new Error(
+      "Intervention threshold must be greater than the grace period.",
+    );
+  }
+  if (!isSessionIntensity(value.intensity)) {
+    throw new Error("Intensity must be gentle, balanced, or strict.");
+  }
+
+  return {
+    taskDraft: value.taskDraft,
+    targetApplication,
+    durationMs: value.durationMs,
+    gracePeriodMs: value.gracePeriodMs,
+    interventionAfterMs: value.interventionAfterMs,
+    intensity: value.intensity,
+  };
+}
+
+export function parsePreferencesFlushRequestId(value: unknown): string {
+  if (typeof value !== "string" || value.length === 0 || value.length > 128) {
+    throw new Error("Malformed preferences flush request.");
+  }
+  return value;
 }
 
 export function parseApplicationList(
