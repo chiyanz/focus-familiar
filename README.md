@@ -4,8 +4,9 @@ Focus Familiar is a local-first desktop pet for macOS that helps you stay with t
 
 > [!NOTE]
 > A local macOS prototype can run complete focus sessions from the settings
-> window. Persistence, window-position recovery, and a signed release are still
-> being completed in small, reviewable slices.
+> window and safely restores interrupted work in a paused state. Window-position
+> recovery and a signed release are still being completed in small, reviewable
+> slices.
 
 ## Version 0.1
 
@@ -50,7 +51,8 @@ Feature plans are living documents. A feature is only marked **Implemented** aft
 | Architecture direction | Proposed    |
 | Electron application   | Implemented |
 | Live focus prototype   | Implemented |
-| Persistence UI         | In progress |
+| Session persistence    | Implemented |
+| Remaining preferences  | In progress |
 | Signed GitHub release  | Planned     |
 
 The development baseline requires macOS 13 or newer and Node.js 22.

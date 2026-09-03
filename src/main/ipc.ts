@@ -12,11 +12,14 @@ import type {
 import {
   IPC_CHANNELS,
   IPC_EVENTS,
+  parsePreferencesFlushRequestId,
   parseSessionAction,
+  parseSessionPreferences,
   parseSessionStartConfig,
   parseWindowAction,
   toAppPlatform,
   type AppInfo,
+  type SessionPreferences,
   type SessionSnapshot,
 } from "../shared/ipc";
 import {
@@ -39,6 +42,8 @@ export interface IpcDependencies {
     | Pick<ActivityProvider, "listApplications">
     | undefined;
   readonly getSessionController: () => SessionController | undefined;
+  readonly getSettingsController: () => SettingsController | undefined;
+  readonly acknowledgePreferencesFlush: (requestId: string) => void;
   readonly createSessionId: () => string;
 }
 
@@ -51,6 +56,16 @@ export interface SessionController {
   readonly pause: () => SessionReduction;
   readonly resume: () => Promise<SessionReduction>;
   readonly stop: (reason: "user" | "emergency") => SessionReduction;
+}
+
+export interface SettingsController {
+  readonly sessionPreferences: () => SessionPreferences;
+  readonly updateSessionPreferences: (
+    preferences: SessionPreferences,
+  ) => Promise<
+    | { readonly ok: true }
+    | { readonly ok: false; readonly error: { readonly message: string } }
+  >;
 }
 
 export function registerIpcHandlers(dependencies: IpcDependencies): () => void {
@@ -141,6 +156,40 @@ export function registerIpcHandlers(dependencies: IpcDependencies): () => void {
     },
   );
 
+  ipcMain.handle(IPC_CHANNELS.getSessionPreferences, (event) => {
+    assertTrustedSender(event, getWindows());
+    const settings = requireService(
+      dependencies.getSettingsController(),
+      "Local settings are unavailable.",
+    );
+    return settings.sessionPreferences();
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.saveSessionPreferences,
+    async (event, payload: unknown) => {
+      assertTrustedSender(event, getWindows());
+      const preferences = parseSessionPreferences(payload);
+      const settings = requireService(
+        dependencies.getSettingsController(),
+        "Local settings are unavailable.",
+      );
+      const result = await settings.updateSessionPreferences(preferences);
+      if (!result.ok) throw new Error(result.error.message);
+      return settings.sessionPreferences();
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.acknowledgePreferencesFlush,
+    (event, payload: unknown) => {
+      assertTrustedSender(event, getWindows());
+      dependencies.acknowledgePreferencesFlush(
+        parsePreferencesFlushRequestId(payload),
+      );
+    },
+  );
+
   return () => {
     ipcMain.removeHandler(IPC_CHANNELS.getAppInfo);
     ipcMain.removeHandler(IPC_CHANNELS.windowAction);
@@ -148,6 +197,9 @@ export function registerIpcHandlers(dependencies: IpcDependencies): () => void {
     ipcMain.removeHandler(IPC_CHANNELS.getSessionSnapshot);
     ipcMain.removeHandler(IPC_CHANNELS.startSession);
     ipcMain.removeHandler(IPC_CHANNELS.sessionAction);
+    ipcMain.removeHandler(IPC_CHANNELS.getSessionPreferences);
+    ipcMain.removeHandler(IPC_CHANNELS.saveSessionPreferences);
+    ipcMain.removeHandler(IPC_CHANNELS.acknowledgePreferencesFlush);
   };
 }
 

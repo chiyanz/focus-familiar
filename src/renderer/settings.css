@@ -148,6 +148,27 @@ h2 {
   gap: 12px;
 }
 
+.section-meta {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.save-status {
+  color: #8a7480;
+  font-size: 10px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.save-status[data-save-state="saving"] {
+  color: #95647a;
+}
+
+.save-status[data-save-state="error"] {
+  color: #ae4f51;
+}
+
 .status-dot {
   width: 9px;
   height: 9px;

@@ -5,6 +5,8 @@ import {
   parseAppInfo,
   parseApplicationList,
   parseSessionAction,
+  parseSessionPreferences,
+  parsePreferencesFlushRequestId,
   parseSessionSnapshot,
   parseSessionStartConfig,
   type AppInfo,
@@ -14,6 +16,7 @@ import {
   type IpcEvent,
   type SessionAction,
   type SessionSnapshot,
+  type SessionPreferences,
   type SessionStartConfig,
   type WindowAction,
 } from "../shared/ipc";
@@ -69,6 +72,32 @@ export function createPreloadApi(invoker: PreloadInvoker): FocusFamiliarApi {
     onSessionChanged: (listener) => {
       return invoker.on(IPC_EVENTS.sessionChanged, (payload) => {
         listener(parseSessionSnapshot(payload));
+      });
+    },
+    getSessionPreferences: async (): Promise<SessionPreferences> => {
+      const response = await invoker.invoke(IPC_CHANNELS.getSessionPreferences);
+      return parseSessionPreferences(response);
+    },
+    saveSessionPreferences: async (
+      preferences: SessionPreferences,
+    ): Promise<SessionPreferences> => {
+      const normalizedPreferences = parseSessionPreferences(preferences);
+      const response = await invoker.invoke(
+        IPC_CHANNELS.saveSessionPreferences,
+        normalizedPreferences,
+      );
+      return parseSessionPreferences(response);
+    },
+    onPreferencesFlushRequested: (listener) => {
+      return invoker.on(IPC_EVENTS.preferencesFlushRequested, (payload) => {
+        const requestId = parsePreferencesFlushRequestId(payload);
+        void Promise.resolve()
+          .then(listener)
+          .catch(() => undefined)
+          .then(() =>
+            invoker.invoke(IPC_CHANNELS.acknowledgePreferencesFlush, requestId),
+          )
+          .catch(() => undefined);
       });
     },
   };

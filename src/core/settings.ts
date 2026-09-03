@@ -413,7 +413,7 @@ function normalizeStringPreference(
     );
     return fallback;
   }
-  return value.trim();
+  return value;
 }
 
 function normalizeNullableApplicationPreference(

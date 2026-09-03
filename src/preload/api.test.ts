@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { createPreloadApi, type PreloadInvoker } from "./api";
-import type { SessionSnapshot } from "../shared/ipc";
+import type { SessionPreferences, SessionSnapshot } from "../shared/ipc";
 
 const validSnapshot: SessionSnapshot = {
   schemaVersion: 1,
@@ -24,9 +24,21 @@ const validSnapshot: SessionSnapshot = {
   },
 };
 
+const validPreferences: SessionPreferences = {
+  taskDraft: "Build the prototype",
+  targetApplication: {
+    bundleId: "com.microsoft.VSCode",
+    name: "Visual Studio Code",
+  },
+  durationMs: 25 * 60 * 1000,
+  gracePeriodMs: 20 * 1000,
+  interventionAfterMs: 90 * 1000,
+  intensity: "balanced",
+};
+
 describe("preload API", () => {
   it("exposes only the documented renderer operations", async () => {
-    const invoke = vi.fn<PreloadInvoker["invoke"]>(async (channel) => {
+    const invoke = vi.fn<PreloadInvoker["invoke"]>(async (channel, payload) => {
       if (channel === "app:get-info") {
         return { name: "Focus Familiar", version: "0.1.0", platform: "darwin" };
       }
@@ -34,6 +46,14 @@ describe("preload API", () => {
         return [
           { bundleId: "com.microsoft.VSCode", name: "Visual Studio Code" },
         ];
+      }
+      if (
+        channel === "settings:get-session-preferences" ||
+        channel === "settings:save-session-preferences"
+      ) {
+        return channel === "settings:save-session-preferences"
+          ? payload
+          : validPreferences;
       }
 
       return validSnapshot;
@@ -49,6 +69,9 @@ describe("preload API", () => {
       "startSession",
       "requestSessionAction",
       "onSessionChanged",
+      "getSessionPreferences",
+      "saveSessionPreferences",
+      "onPreferencesFlushRequested",
     ]);
     await expect(api.getAppInfo()).resolves.toEqual({
       name: "Focus Familiar",
@@ -59,6 +82,18 @@ describe("preload API", () => {
     await expect(api.listApplications()).resolves.toEqual([
       { bundleId: "com.microsoft.VSCode", name: "Visual Studio Code" },
     ]);
+    await expect(api.getSessionPreferences()).resolves.toEqual(
+      validPreferences,
+    );
+    await expect(
+      api.saveSessionPreferences({
+        ...validPreferences,
+        taskDraft: "  Build the prototype  ",
+      }),
+    ).resolves.toEqual({
+      ...validPreferences,
+      taskDraft: "  Build the prototype  ",
+    });
     await expect(api.getSessionSnapshot()).resolves.toEqual(validSnapshot);
     await expect(
       api.startSession({
@@ -79,8 +114,20 @@ describe("preload API", () => {
     expect(invoke).toHaveBeenNthCalledWith(1, "app:get-info");
     expect(invoke).toHaveBeenNthCalledWith(2, "window:action", "show-settings");
     expect(invoke).toHaveBeenNthCalledWith(3, "applications:list");
-    expect(invoke).toHaveBeenNthCalledWith(4, "session:get");
-    expect(invoke).toHaveBeenNthCalledWith(5, "session:start", {
+    expect(invoke).toHaveBeenNthCalledWith(
+      4,
+      "settings:get-session-preferences",
+    );
+    expect(invoke).toHaveBeenNthCalledWith(
+      5,
+      "settings:save-session-preferences",
+      {
+        ...validPreferences,
+        taskDraft: "  Build the prototype  ",
+      },
+    );
+    expect(invoke).toHaveBeenNthCalledWith(6, "session:get");
+    expect(invoke).toHaveBeenNthCalledWith(7, "session:start", {
       task: "Build the prototype",
       targetApplication: {
         bundleId: "com.microsoft.VSCode",
@@ -91,7 +138,7 @@ describe("preload API", () => {
       interventionAfterMs: 90 * 1000,
       intensity: "balanced",
     });
-    expect(invoke).toHaveBeenNthCalledWith(6, "session:action", "pause");
+    expect(invoke).toHaveBeenNthCalledWith(8, "session:action", "pause");
     expect(on).not.toHaveBeenCalled();
   });
 
@@ -122,6 +169,12 @@ describe("preload API", () => {
     await expect(api.listApplications()).rejects.toThrow(
       "Malformed application list.",
     );
+    await expect(api.getSessionPreferences()).rejects.toThrow(
+      "Task draft must be a string.",
+    );
+    await expect(api.saveSessionPreferences(validPreferences)).rejects.toThrow(
+      "Task draft must be a string.",
+    );
     await expect(api.getSessionSnapshot()).rejects.toThrow(
       "Malformed session snapshot.",
     );
@@ -145,6 +198,22 @@ describe("preload API", () => {
         intensity: "gentle",
       }),
     ).rejects.toThrow("Task must be a non-empty string.");
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("validates preferences before crossing the bridge", async () => {
+    const invoke = vi.fn<PreloadInvoker["invoke"]>(
+      async () => validPreferences,
+    );
+    const on = vi.fn<PreloadInvoker["on"]>(() => () => undefined);
+    const api = createPreloadApi({ invoke, on });
+
+    await expect(
+      api.saveSessionPreferences({
+        ...validPreferences,
+        taskDraft: 42 as never,
+      }),
+    ).rejects.toThrow("Task draft must be a string.");
     expect(invoke).not.toHaveBeenCalled();
   });
 
@@ -202,5 +271,28 @@ describe("preload API", () => {
       "Malformed session snapshot.",
     );
     expect(listener).not.toHaveBeenCalled();
+  });
+
+  it("flushes renderer preferences and acknowledges the main process", async () => {
+    let callback: ((payload: unknown) => void) | undefined;
+    const invoke = vi.fn<PreloadInvoker["invoke"]>(async () => undefined);
+    const on = vi.fn<PreloadInvoker["on"]>((channel, listener) => {
+      expect(channel).toBe("settings:flush-requested");
+      callback = listener;
+      return () => undefined;
+    });
+    const api = createPreloadApi({ invoke, on });
+    const listener = vi.fn(async () => undefined);
+
+    api.onPreferencesFlushRequested(listener);
+    callback?.("request-1");
+
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
+    await vi.waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "settings:acknowledge-flush",
+        "request-1",
+      ),
+    );
   });
 });
