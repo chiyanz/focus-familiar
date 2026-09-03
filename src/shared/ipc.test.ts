@@ -12,6 +12,7 @@ import {
   isWindowAction,
   parseAppInfo,
   parsePetWindowPreferences,
+  parsePetWindowDragEvent,
   parsePetWindowSize,
   parseSessionAction,
   parsePreferencesFlushRequestId,
@@ -31,6 +32,7 @@ describe("IPC contracts", () => {
       checkForUpdates: "updates:check",
       openUpdateRelease: "updates:open-release",
       windowAction: "window:action",
+      petWindowDrag: "window:pet-drag",
       getPetWindowPreferences: "settings:get-pet-window-preferences",
       setPetWindowSize: "settings:set-pet-window-size",
       listApplications: "applications:list",
@@ -150,6 +152,28 @@ describe("IPC contracts", () => {
     expect(() => parsePetWindowPreferences(null)).toThrow(
       "Malformed pet window preferences.",
     );
+  });
+
+  it("validates minimal pet drag events at the IPC boundary", () => {
+    expect(
+      parsePetWindowDragEvent({
+        phase: "move",
+        screenX: -120,
+        screenY: 640,
+        ignored: "private",
+      }),
+    ).toEqual({ phase: "move", screenX: -120, screenY: 640 });
+
+    for (const value of [
+      null,
+      { phase: "drag", screenX: 0, screenY: 0 },
+      { phase: "start", screenX: 0.5, screenY: 0 },
+      { phase: "end", screenX: 0, screenY: Number.POSITIVE_INFINITY },
+    ]) {
+      expect(() => parsePetWindowDragEvent(value)).toThrow(
+        "Malformed pet window drag event",
+      );
+    }
   });
 
   it("accepts only documented window actions", () => {

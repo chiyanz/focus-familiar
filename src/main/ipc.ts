@@ -13,6 +13,7 @@ import {
   IPC_CHANNELS,
   IPC_EVENTS,
   parsePetWindowSize,
+  parsePetWindowDragEvent,
   parsePreferencesFlushRequestId,
   parseSessionAction,
   parseSessionPreferences,
@@ -21,6 +22,7 @@ import {
   toAppPlatform,
   type AppInfo,
   type PetWindowPreferences,
+  type PetWindowDragEvent,
   type SessionPreferences,
   type SessionSnapshot,
   type UpdateStatus,
@@ -49,6 +51,10 @@ export interface IpcDependencies {
   readonly getUpdateController: () => UpdateController | undefined;
   readonly getPetWindowSize: () => number | undefined;
   readonly setPetWindowSize: (sizePx: number) => Promise<void>;
+  readonly movePetWindow: (
+    window: BrowserWindow,
+    event: PetWindowDragEvent,
+  ) => void;
   readonly acknowledgePreferencesFlush: (requestId: string) => void;
   readonly createSessionId: () => string;
 }
@@ -137,6 +143,16 @@ export function registerIpcHandlers(dependencies: IpcDependencies): () => void {
         app.quit();
         break;
     }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.petWindowDrag, (event, payload: unknown) => {
+    const sender = assertTrustedSender(event, getWindows());
+    if (sender.kind !== "pet") {
+      throw new Error(
+        "Pet window dragging is only available to the pet renderer.",
+      );
+    }
+    dependencies.movePetWindow(sender.window, parsePetWindowDragEvent(payload));
   });
 
   ipcMain.handle(IPC_CHANNELS.getPetWindowPreferences, (event) => {
@@ -251,6 +267,7 @@ export function registerIpcHandlers(dependencies: IpcDependencies): () => void {
     ipcMain.removeHandler(IPC_CHANNELS.checkForUpdates);
     ipcMain.removeHandler(IPC_CHANNELS.openUpdateRelease);
     ipcMain.removeHandler(IPC_CHANNELS.windowAction);
+    ipcMain.removeHandler(IPC_CHANNELS.petWindowDrag);
     ipcMain.removeHandler(IPC_CHANNELS.getPetWindowPreferences);
     ipcMain.removeHandler(IPC_CHANNELS.setPetWindowSize);
     ipcMain.removeHandler(IPC_CHANNELS.listApplications);
@@ -343,7 +360,7 @@ function requireService<T>(service: T | undefined, message: string): T {
 export function assertTrustedSender(
   event: Pick<IpcMainInvokeEvent, "sender" | "senderFrame">,
   windows: readonly ManagedWindow[],
-): void {
+): ManagedWindow {
   const managedWindow = windows.find(
     ({ window }) => window.webContents === event.sender,
   );
@@ -355,4 +372,6 @@ export function assertTrustedSender(
   ) {
     throw new Error("Rejected IPC from an untrusted renderer.");
   }
+
+  return managedWindow;
 }

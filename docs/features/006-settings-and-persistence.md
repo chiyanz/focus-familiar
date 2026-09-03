@@ -8,7 +8,8 @@ Users can configure sessions and pet behavior, and the app restores safe prefere
 
 ## Scope
 
-- Task, duration, target application, intensity, and timing controls.
+- Optional focus note, duration, target application, away behavior, and timing
+  controls.
 - Pet position, reduced-motion override, sound, and launch behavior.
 - Versioned settings schema and migrations.
 - Safe recovery of an interrupted active session.
@@ -53,6 +54,15 @@ The session form now loads and saves its task draft, selected target,
 duration, intensity, grace period, and intervention threshold through the
 validated preload boundary. Writes are debounced while editing and serialized
 with recovery writes so simultaneous changes cannot overwrite one another.
+
+The focus note is optional in the settings UI. The core still receives a
+deterministic task such as `Focus in Visual Studio Code` when the note is blank,
+while local preferences retain the raw blank draft. This preserves the core's
+non-empty task contract without making users invent a label. The former
+three-way mood selector is presented as an explicit away behavior: balanced
+strengthens visual reminders, while strict additionally asks macOS to bring the
+selected focus app forward once. Legacy persisted `gentle` values are shown and
+saved as balanced.
 
 The settings window also exposes an always-available pet-size slider. The
 bounded size and display-aware drag position use the same validated local

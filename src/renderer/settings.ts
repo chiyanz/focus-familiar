@@ -15,7 +15,10 @@ import {
 import {
   areSessionPreferencesEqual,
   DEFAULT_SESSION_PREFERENCES,
+  fallbackTaskForTarget,
+  normalizeSessionIntensity,
   preferencesFromConfig,
+  taskForStart,
 } from "./session-preferences";
 
 import "./settings.css";
@@ -37,6 +40,7 @@ const refreshApplicationsButton = document.querySelector<HTMLButtonElement>(
 const durationInput =
   document.querySelector<HTMLInputElement>("#duration-minutes");
 const intensitySelect = document.querySelector<HTMLSelectElement>("#intensity");
+const intensityHelp = document.querySelector<HTMLElement>("#intensity-hint");
 const graceInput = document.querySelector<HTMLInputElement>("#grace-seconds");
 const interventionInput = document.querySelector<HTMLInputElement>(
   "#intervention-seconds",
@@ -93,7 +97,6 @@ const applications = new Map<string, ApplicationSummary>();
 let currentSnapshot: SessionSnapshot | undefined;
 let applicationsLoading = false;
 let actionInFlight = false;
-let hasLoadedSession = false;
 let focusDisplayTimer: number | undefined;
 let focusDisplayStartedAtMs = 0;
 let focusDisplayBaseMs = 0;
@@ -113,6 +116,7 @@ let pendingPetSize: number | undefined;
 let petSizeSaveTimer: number | undefined;
 let petSizeSaveGeneration = 0;
 let petSizeSaveQueue: Promise<void> = Promise.resolve();
+let activeTaskDraft: string | undefined;
 
 if (sessionApi) {
   void sessionApi
@@ -172,6 +176,8 @@ durationInput?.addEventListener("input", () => {
   if (currentSnapshot?.capabilities.canStart) renderIdlePreview();
 });
 
+intensitySelect?.addEventListener("change", renderIntensityHelp);
+
 petSizeInput?.addEventListener("input", () => {
   renderPetSizeValue(readPetSize() ?? PET_WINDOW_SIZE_DEFAULT);
   schedulePetSizeSave();
@@ -192,6 +198,8 @@ for (const control of [
   control?.addEventListener("input", schedulePreferencesSave);
   control?.addEventListener("change", schedulePreferencesSave);
 }
+
+renderIntensityHelp();
 
 let unsubscribeFromSession: (() => void) | undefined;
 try {
@@ -357,7 +365,6 @@ async function loadSessionPreferences(): Promise<void> {
 
 async function loadSessionSnapshot(): Promise<void> {
   if (!sessionApi) {
-    hasLoadedSession = true;
     showError("Open this page from the Focus Familiar app to start a session.");
     renderIdlePreview();
     return;
@@ -366,7 +373,6 @@ async function loadSessionSnapshot(): Promise<void> {
     const snapshot = await sessionApi.getSessionSnapshot();
     applySnapshot(snapshot);
   } catch (error: unknown) {
-    hasLoadedSession = true;
     showError(errorMessage(error, "Focus sessions are unavailable right now."));
     renderIdlePreview(false);
   }
@@ -498,9 +504,10 @@ async function startSession(): Promise<void> {
     return;
   }
 
+  const taskDraft = taskInput?.value ?? "";
   setActionInFlight(startButton, "Saving…");
   const saved = await savePreferencesBeforeStart(
-    preferencesFromConfig(request.config),
+    preferencesFromConfig(request.config, taskDraft),
   );
   if (!saved) {
     clearActionInFlight(startButton, "Start focus");
@@ -510,6 +517,7 @@ async function startSession(): Promise<void> {
   if (startButton) startButton.textContent = "Starting…";
   try {
     const snapshot = await sessionApi.startSession(request.config);
+    activeTaskDraft = taskDraft;
     applySnapshot(snapshot);
   } catch (error: unknown) {
     showError(errorMessage(error, "The focus session could not start."));
@@ -556,15 +564,6 @@ function readSessionConfig():
       readonly message: string;
       readonly focus?: HTMLInputElement | HTMLSelectElement | null;
     } {
-  const task = taskInput?.value.trim() ?? "";
-  if (task.length === 0) {
-    return {
-      ok: false,
-      message: "Give this focus session a small task.",
-      focus: taskInput,
-    };
-  }
-
   const targetApplication = targetSelect
     ? applications.get(targetSelect.value)
     : undefined;
@@ -575,6 +574,8 @@ function readSessionConfig():
       focus: targetSelect,
     };
   }
+
+  const task = taskForStart(taskInput?.value ?? "", targetApplication);
 
   const durationMinutes = readInteger(durationInput?.value, 1, 480);
   if (durationMinutes === undefined) {
@@ -610,15 +611,11 @@ function readSessionConfig():
     };
   }
 
-  const intensity = intensitySelect?.value;
-  if (
-    intensity !== "gentle" &&
-    intensity !== "balanced" &&
-    intensity !== "strict"
-  ) {
+  const intensity = readIntensity(intensitySelect?.value);
+  if (!intensity) {
     return {
       ok: false,
-      message: "Choose a valid reminder mood.",
+      message: "Choose how the pet should respond when you stay away.",
       focus: intensitySelect,
     };
   }
@@ -662,7 +659,10 @@ function applySavedPreferences(preferences: SessionPreferences): void {
       Math.max(1, Math.round(preferences.interventionAfterMs / 1_000)),
     );
   }
-  if (intensitySelect) intensitySelect.value = preferences.intensity;
+  if (intensitySelect) {
+    intensitySelect.value = normalizeSessionIntensity(preferences.intensity);
+  }
+  renderIntensityHelp();
   if (currentSnapshot?.phase === "idle") renderIdlePreview();
 }
 
@@ -699,13 +699,12 @@ function readSessionPreferences():
     };
   }
 
-  const intensity = intensitySelect?.value;
-  if (
-    intensity !== "gentle" &&
-    intensity !== "balanced" &&
-    intensity !== "strict"
-  ) {
-    return { ok: false, message: "Choose a valid reminder mood." };
+  const intensity = readIntensity(intensitySelect?.value);
+  if (!intensity) {
+    return {
+      ok: false,
+      message: "Choose how the pet should respond when you stay away.",
+    };
   }
 
   const targetApplication = targetSelect?.value
@@ -811,7 +810,23 @@ async function persistPreferences(
 
 function applySnapshot(snapshot: SessionSnapshot): void {
   currentSnapshot = snapshot;
-  hasLoadedSession = true;
+
+  // A recovered session may arrive before preferences finish loading. Keep the
+  // raw optional note around so ending that session does not turn our generated
+  // core task into a persisted draft.
+  if (
+    !snapshot.capabilities.canStart &&
+    activeTaskDraft === undefined &&
+    loadedPreferences !== undefined &&
+    snapshot.sessionId !== null
+  ) {
+    activeTaskDraft = loadedPreferences.taskDraft;
+  }
+
+  if (snapshot.capabilities.canStart && activeTaskDraft !== undefined) {
+    if (taskInput) taskInput.value = activeTaskDraft;
+    activeTaskDraft = undefined;
+  }
 
   if (!snapshot.capabilities.canStart) {
     if (snapshot.task !== null && taskInput) {
@@ -844,7 +859,8 @@ function applySnapshot(snapshot: SessionSnapshot): void {
       );
     }
     if (snapshot.intensity !== null && intensitySelect) {
-      intensitySelect.value = snapshot.intensity;
+      intensitySelect.value = normalizeSessionIntensity(snapshot.intensity);
+      renderIntensityHelp();
     }
   }
 
@@ -879,9 +895,9 @@ function renderIdlePreview(sessionAvailable = Boolean(sessionApi)): void {
   if (statusLabel) statusLabel.textContent = PHASE_LABELS.idle;
   if (statusDot) statusDot.dataset.phase = "idle";
   if (statusDetail) {
-    statusDetail.textContent = hasLoadedSession
-      ? "Focus sessions are unavailable on this platform."
-      : "Pick a task and app, then start when you’re ready.";
+    statusDetail.textContent = sessionAvailable
+      ? "Pick an app, then start when you’re ready."
+      : "Focus sessions are unavailable on this platform.";
   }
   setConfigurationEnabled(true);
   if (startButton) startButton.disabled = !sessionAvailable;
@@ -961,11 +977,11 @@ function detailFor(snapshot: SessionSnapshot): string {
   const targetName = snapshot.targetApplication?.name ?? "your focus app";
   switch (snapshot.phase) {
     case "idle":
-      return "Pick a task and app, then start when you’re ready.";
+      return "Pick an app, then start when you’re ready.";
     case "focused":
-      return snapshot.task
+      return snapshot.task && !isFallbackTask(snapshot)
         ? `Working on “${snapshot.task}” in ${targetName}.`
-        : `Stay in ${targetName}; you’re doing well.`;
+        : `Focusing in ${targetName}; you’re doing well.`;
     case "grace":
       return `You’re away from ${targetName}. Come back when you’re ready.`;
     case "nudge":
@@ -1162,6 +1178,31 @@ function clearActionInFlight(
 function readPreviewDurationMs(): number {
   const durationMinutes = readInteger(durationInput?.value, 1, 480) ?? 25;
   return durationMinutes * 60_000;
+}
+
+function renderIntensityHelp(): void {
+  if (!intensityHelp) return;
+  intensityHelp.textContent =
+    readIntensity(intensitySelect?.value) === "strict"
+      ? "The pet grows more insistent and asks macOS to bring your focus app forward once."
+      : "The pet uses stronger visual reminders as you stay away; it never changes apps.";
+}
+
+function readIntensity(
+  value: string | undefined,
+): "balanced" | "strict" | undefined {
+  if (value === "strict") return "strict";
+  if (value === "balanced" || value === "gentle") return "balanced";
+  return undefined;
+}
+
+function isFallbackTask(snapshot: SessionSnapshot): boolean {
+  return (
+    snapshot.task?.trim() ===
+    (snapshot.targetApplication
+      ? fallbackTaskForTarget(snapshot.targetApplication)
+      : "")
+  );
 }
 
 function readInteger(

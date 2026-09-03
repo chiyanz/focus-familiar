@@ -23,10 +23,11 @@ The initial user is a Mac-based knowledge worker or developer who:
 
 Each session records:
 
-- A short task description.
+- An optional short focus note.
 - One target application.
 - A duration.
-- An intervention intensity.
+- A choice between visual reminders and a one-time request to return to the
+  target application.
 - Timing thresholds for the escalation ladder.
 
 Version 0.1 treats every other foreground application as time away from the target. Later versions may add allowed applications, but browser-domain and editor-workspace inspection are not required for the initial product.
@@ -43,11 +44,13 @@ A grace period allows normal application switching without interruption.
 
 ### Distracted
 
-After the grace period, the pet changes posture and offers a concise reminder connected to the user's stated task.
+After the grace period, the pet becomes more attentive and offers a concise reminder.
 
 ### Intervention
 
-If time away continues, the app presents stronger but reversible friction, including a countdown and a clear action that requests a return to the target application.
+If time away continues, the pet periodically reveals stronger but reversible
+reminders. When the user explicitly selects strict behavior, Focus Familiar
+also asks macOS to bring the already-running target application forward once.
 
 ### Returned
 

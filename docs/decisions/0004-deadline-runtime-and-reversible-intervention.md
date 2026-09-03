@@ -12,7 +12,14 @@ The product also needs a stronger strict mode without pretending it can or shoul
 
 ## Decision
 
-The main process schedules one cancellable timer for the next absolute reducer boundary. The boundary is derived from the authoritative session snapshot, and both the clock and timer driver are injected. When a delayed callback runs, it advances the reducer at the planned boundary; any already-due following boundary is scheduled immediately. Long waits are split into safe timer-sized chunks. Paused, terminal, and intervention states have no deadline timer.
+The main process schedules one cancellable timer for the next absolute reducer
+boundary. The boundary is derived from the authoritative session snapshot, and
+both the clock and timer driver are injected. When a delayed callback runs, it
+advances the reducer at the planned boundary; any already-due following
+boundary is scheduled immediately. Long waits are split into safe timer-sized
+chunks. Paused and terminal states have no deadline timer. Intervention uses a
+15-second heartbeat so authoritative away time and progressively stronger
+presentation can refresh without frequent polling.
 
 Timer setup failures are explicit runtime failures and cause a running session to pause rather than silently continuing with inaccurate monitoring.
 
@@ -24,6 +31,8 @@ The foreground observer remains the authority: an activation result never marks 
 
 - Threshold transitions remain deterministic even when timer delivery is late.
 - Runtime work is proportional to meaningful boundaries rather than a polling frequency.
+- Prolonged intervention performs low-frequency deterministic work until the
+  user returns, pauses, or stops.
 - A strict intervention creates reversible friction but is not an unbreakable lock.
 - An activation request already handed to macOS cannot be recalled, but stale completion callbacks have no effect.
 - Presentation and manual controls can subscribe to authoritative state later without owning timing or platform policy.

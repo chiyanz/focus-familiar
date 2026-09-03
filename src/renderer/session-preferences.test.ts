@@ -4,7 +4,10 @@ import type { SessionStartConfig } from "../shared/ipc";
 import {
   areSessionPreferencesEqual,
   DEFAULT_SESSION_PREFERENCES,
+  fallbackTaskForTarget,
+  normalizeSessionIntensity,
   preferencesFromConfig,
+  taskForStart,
 } from "./session-preferences";
 
 const config: SessionStartConfig = {
@@ -29,6 +32,30 @@ describe("session preferences", () => {
       interventionAfterMs: config.interventionAfterMs,
       intensity: config.intensity,
     });
+  });
+
+  it("can persist the raw optional note separately from the core task", () => {
+    const fallback = fallbackTaskForTarget(config.targetApplication);
+    expect(fallback).toBe("Focus in Editor");
+    expect(taskForStart("   ", config.targetApplication)).toBe(fallback);
+    expect(taskForStart("  Ship it  ", config.targetApplication)).toBe(
+      "Ship it",
+    );
+    expect(
+      preferencesFromConfig({ ...config, task: fallback }, "  "),
+    ).toMatchObject({
+      taskDraft: "  ",
+      targetApplication: config.targetApplication,
+    });
+  });
+
+  it("maps the legacy gentle preference to balanced", () => {
+    expect(normalizeSessionIntensity("gentle")).toBe("balanced");
+    expect(normalizeSessionIntensity("balanced")).toBe("balanced");
+    expect(normalizeSessionIntensity("strict")).toBe("strict");
+    expect(
+      preferencesFromConfig({ ...config, intensity: "gentle" }),
+    ).toMatchObject({ intensity: "balanced" });
   });
 
   it("keeps a safe blank draft as the renderer fallback", () => {

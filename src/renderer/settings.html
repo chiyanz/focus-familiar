@@ -55,7 +55,7 @@
 
         <form id="session-form" novalidate>
           <div class="field-group">
-            <label for="task">One small task</label>
+            <label for="task">Focus note (optional)</label>
             <input
               id="task"
               name="task"
@@ -63,9 +63,11 @@
               autocomplete="off"
               maxlength="160"
               placeholder="e.g. Ship the focus-session API"
-              required
             />
-            <p class="field-hint">A short phrase keeps the intention close.</p>
+            <p class="field-hint">
+              Optional — shown in your session summary. Tracking uses only the
+              selected app.
+            </p>
           </div>
 
           <div class="field-group">
@@ -114,12 +116,19 @@
             </div>
 
             <div class="field-group">
-              <label for="intensity">Mood</label>
-              <select id="intensity" name="intensity">
-                <option value="gentle">Gentle</option>
-                <option value="balanced" selected>Balanced</option>
-                <option value="strict">Strict</option>
+              <label for="intensity">After I stay away</label>
+              <select
+                id="intensity"
+                name="intensity"
+                aria-describedby="intensity-hint"
+              >
+                <option value="balanced" selected>Stronger reminders</option>
+                <option value="strict">Bring focus app forward</option>
               </select>
+              <p class="field-hint" id="intensity-hint">
+                The pet uses stronger visual reminders as you stay away; it
+                never changes apps.
+              </p>
             </div>
           </div>
 
@@ -183,9 +192,7 @@
               max="1"
               aria-label="Focused time progress"
             ></progress>
-            <p id="status-detail">
-              Pick a task and app, then start when you’re ready.
-            </p>
+            <p id="status-detail">Pick an app, then start when you’re ready.</p>
           </div>
 
           <p

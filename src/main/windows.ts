@@ -22,6 +22,11 @@ export interface WindowRectangle {
   readonly height: number;
 }
 
+export interface ScreenPoint {
+  readonly x: number;
+  readonly y: number;
+}
+
 export type RendererTarget =
   | {
       readonly kind: "dev";
@@ -122,6 +127,21 @@ export function resizePetWindowBounds(
   const centeredY =
     currentBounds.y + Math.round((currentBounds.height - safeSize) / 2);
   return clampPetWindowBounds(centeredX, centeredY, safeSize, workArea);
+}
+
+/** Translate a pet window from a pointer-drag origin, then keep it reachable. */
+export function dragPetWindowBounds(
+  initialBounds: WindowRectangle,
+  pointerStart: ScreenPoint,
+  pointerCurrent: ScreenPoint,
+  workArea: WindowRectangle,
+): WindowRectangle {
+  return clampPetWindowBounds(
+    initialBounds.x + pointerCurrent.x - pointerStart.x,
+    initialBounds.y + pointerCurrent.y - pointerStart.y,
+    initialBounds.width,
+    workArea,
+  );
 }
 
 function normalizePetWindowSize(size: number): number {

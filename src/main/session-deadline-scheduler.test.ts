@@ -5,6 +5,7 @@ import type { Clock } from "../platform/application";
 import {
   getNextDeadlineAtMs,
   getNextDeadlineDelayMs,
+  INTERVENTION_HEARTBEAT_MS,
   SessionDeadlineScheduler,
   type SessionDeadlineTimerHandle,
 } from "./session-deadline-scheduler";
@@ -76,7 +77,13 @@ class FakeTimerDriver {
   });
 
   fire(index: number): void {
-    this.timers[index]?.callback();
+    const timer = this.timers[index];
+    if (!timer) return;
+    // A one-shot host timer is no longer active once its callback starts.
+    // Marking it here lets tests distinguish a consumed timer from a pending
+    // timer that has not yet been cancelled by the scheduler.
+    timer.canceled = true;
+    timer.callback();
   }
 }
 
@@ -112,6 +119,12 @@ describe("getNextDeadlineDelayMs", () => {
     },
   );
 
+  it("uses a recurring heartbeat while intervention is active", () => {
+    expect(
+      getNextDeadlineDelayMs(state("intervention", { currentAwayMs: 30_000 })),
+    ).toBe(INTERVENTION_HEARTBEAT_MS);
+  });
+
   it.each([
     ["focused", { focusedMs: 9_999 }, 1],
     ["focused", { focusedMs: 10_000 }, 0],
@@ -129,7 +142,7 @@ describe("getNextDeadlineDelayMs", () => {
     },
   );
 
-  it.each(["idle", "intervention", "paused", "completed", "stopped"] as const)(
+  it.each(["idle", "paused", "completed", "stopped"] as const)(
     "does not define a timer deadline for %s",
     (phase) => {
       expect(getNextDeadlineDelayMs(state(phase))).toBeNull();
@@ -144,6 +157,17 @@ describe("getNextDeadlineDelayMs", () => {
     });
 
     expect(getNextDeadlineAtMs(current)).toBe(11_500);
+  });
+
+  it("derives the next intervention heartbeat from the last event timestamp", () => {
+    expect(
+      getNextDeadlineAtMs(
+        state("intervention", {
+          lastEventAtMs: 30_000,
+          currentAwayMs: 30_000,
+        }),
+      ),
+    ).toBe(30_000 + INTERVENTION_HEARTBEAT_MS);
   });
 
   it("does not define an absolute deadline for an incomplete state", () => {
@@ -210,7 +234,7 @@ describe("SessionDeadlineScheduler", () => {
     const scheduler = schedulerFor(clock, driver);
 
     scheduler.synchronize(state("nudge", { currentAwayMs: 2_000 }));
-    expect(scheduler.synchronize(state("intervention"))).toBeNull();
+    expect(scheduler.synchronize(state("paused"))).toBeNull();
 
     expect(driver.cancel).toHaveBeenCalledOnce();
     expect(driver.timers[0]?.canceled).toBe(true);
@@ -268,6 +292,52 @@ describe("SessionDeadlineScheduler", () => {
     driver.fire(1);
     expect(advanceAt).toHaveBeenCalledOnce();
     expect(advanceAt).toHaveBeenCalledWith(1_000);
+  });
+
+  it("refreshes intervention every heartbeat without accumulating timers", () => {
+    const clock = new FakeClock();
+    const driver = new FakeTimerDriver();
+    const advanceAt = vi.fn();
+    const scheduler = schedulerFor(clock, driver, advanceAt);
+
+    clock.now = 3_000;
+    expect(
+      scheduler.synchronize(
+        state("intervention", {
+          lastEventAtMs: 3_000,
+          currentAwayMs: 3_000,
+        }),
+      ),
+    ).toBe(INTERVENTION_HEARTBEAT_MS);
+    expect(driver.timers[0]?.delayMs).toBe(INTERVENTION_HEARTBEAT_MS);
+
+    clock.now = 18_000;
+    driver.fire(0);
+    expect(advanceAt).toHaveBeenCalledOnce();
+    expect(advanceAt).toHaveBeenCalledWith(18_000);
+
+    // The runtime synchronizes after applying the advance. The next timer is
+    // exactly one heartbeat later and is the only active timer.
+    expect(
+      scheduler.synchronize(
+        state("intervention", {
+          lastEventAtMs: 18_000,
+          currentAwayMs: 18_000,
+        }),
+      ),
+    ).toBe(INTERVENTION_HEARTBEAT_MS);
+    expect(driver.timers[1]?.delayMs).toBe(INTERVENTION_HEARTBEAT_MS);
+    expect(driver.timers.filter((timer) => !timer.canceled)).toHaveLength(1);
+
+    // A host callback cannot produce a duplicate advance after it has been
+    // consumed, even if a timer driver invokes it more than once.
+    driver.fire(0);
+    expect(advanceAt).toHaveBeenCalledOnce();
+
+    clock.now = 33_000;
+    driver.fire(1);
+    expect(advanceAt).toHaveBeenCalledTimes(2);
+    expect(advanceAt).toHaveBeenLastCalledWith(33_000);
   });
 
   it("does not schedule or invoke work after dispose, which is idempotent", () => {

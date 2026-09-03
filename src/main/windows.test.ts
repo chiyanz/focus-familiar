@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   clampPetWindowBounds,
+  dragPetWindowBounds,
   getWindowOptions,
   isTrustedRendererUrl,
   joinRendererPath,
@@ -100,6 +101,25 @@ describe("pet window geometry", () => {
         workArea,
       ),
     ).toEqual({ x: 164, y: 164, width: 320, height: 320 });
+  });
+
+  it("moves from the initial pointer origin and clamps across screen edges", () => {
+    expect(
+      dragPetWindowBounds(
+        { x: 400, y: 300, width: 248, height: 248 },
+        { x: 500, y: 400 },
+        { x: 540, y: 450 },
+        workArea,
+      ),
+    ).toEqual({ x: 440, y: 350, width: 248, height: 248 });
+    expect(
+      dragPetWindowBounds(
+        { x: 20, y: 40, width: 248, height: 248 },
+        { x: 100, y: 100 },
+        { x: -500, y: -500 },
+        workArea,
+      ),
+    ).toEqual({ x: 0, y: 24, width: 248, height: 248 });
   });
 });
 

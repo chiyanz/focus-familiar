@@ -30,6 +30,7 @@ import {
 import {
   getWindowOptions,
   clampPetWindowBounds,
+  dragPetWindowBounds,
   loadRendererWindow,
   resizePetWindowBounds,
   resolveRendererTarget,
@@ -44,7 +45,7 @@ import {
   type PausedSessionRecovery,
 } from "../core";
 import type { ActivityProvider, Clock } from "../platform/application";
-import { IPC_EVENTS } from "../shared/ipc";
+import { IPC_EVENTS, type PetWindowDragEvent } from "../shared/ipc";
 import {
   githubReleasePageUrl,
   GitHubReleaseSource,
@@ -73,6 +74,15 @@ let didShowCheckpointFailure = false;
 let didShowPetPlacementFailure = false;
 let petPlacementSaveTimer: ReturnType<typeof setTimeout> | undefined;
 let isDisplayRecoveryInstalled = false;
+let petWindowDrag:
+  | {
+      readonly window: BrowserWindow;
+      readonly pointerX: number;
+      readonly pointerY: number;
+      readonly windowX: number;
+      readonly windowY: number;
+    }
+  | undefined;
 let pendingPreferencesFlush:
   | { readonly requestId: string; readonly resolve: () => void }
   | undefined;
@@ -112,6 +122,7 @@ if (!app.requestSingleInstanceLock()) {
         getPetWindowSize: () =>
           localSettings?.petWindowPreferences().petWindowSize,
         setPetWindowSize: updatePetWindowSize,
+        movePetWindow,
         acknowledgePreferencesFlush: acknowledgePreferencesFlush,
         createSessionId: randomUUID,
       });
@@ -273,7 +284,10 @@ async function createWindow(kind: WindowKind): Promise<void> {
     });
   }
   window.on("closed", () => {
-    if (kind === "pet") clearPetWindowPlacementTimer();
+    if (kind === "pet") {
+      clearPetWindowPlacementTimer();
+      if (petWindowDrag?.window === window) petWindowDrag = undefined;
+    }
     const index = managedWindows.findIndex((entry) => entry.window === window);
     if (index >= 0) managedWindows.splice(index, 1);
   });
@@ -302,6 +316,53 @@ async function updatePetWindowSize(sizePx: number): Promise<void> {
   );
   petWindow.setBounds(nextBounds);
   await persistPetWindowPlacement();
+}
+
+function movePetWindow(
+  petWindow: BrowserWindow,
+  event: PetWindowDragEvent,
+): void {
+  if (petWindow.isDestroyed()) {
+    petWindowDrag = undefined;
+    return;
+  }
+
+  if (event.phase === "start") {
+    const bounds = petWindow.getBounds();
+    petWindowDrag = {
+      window: petWindow,
+      pointerX: event.screenX,
+      pointerY: event.screenY,
+      windowX: bounds.x,
+      windowY: bounds.y,
+    };
+    return;
+  }
+
+  const drag = petWindowDrag;
+  if (!drag || drag.window !== petWindow) return;
+  if (event.phase === "end") {
+    petWindowDrag = undefined;
+    return;
+  }
+
+  const size = petWindow.getBounds().width;
+  const display = screen.getDisplayNearestPoint({
+    x: event.screenX,
+    y: event.screenY,
+  });
+  const nextBounds = dragPetWindowBounds(
+    {
+      x: drag.windowX,
+      y: drag.windowY,
+      width: size,
+      height: size,
+    },
+    { x: drag.pointerX, y: drag.pointerY },
+    { x: event.screenX, y: event.screenY },
+    display.workArea,
+  );
+  petWindow.setPosition(nextBounds.x, nextBounds.y);
 }
 
 function restorePetWindowPlacement(
@@ -433,7 +494,7 @@ async function verifySmokeBoundary(): Promise<void> {
       (!result.petImage.exists ||
         !result.petImage.complete ||
         result.petImage.naturalWidth <= 0 ||
-        result.petDragContract.avatar !== "drag" ||
+        result.petDragContract.avatar !== "no-drag" ||
         result.petDragContract.settings !== "no-drag")
     ) {
       throw new Error(
@@ -466,6 +527,46 @@ async function verifySmokeBoundary(): Promise<void> {
     ) {
       throw new Error(
         `Pet hover-action smoke check failed: ${JSON.stringify(hoverResult)}`,
+      );
+    }
+
+    // A native drag region would swallow the pointer events required above.
+    // Exercise the replacement bridge with Chromium input so hover and drag
+    // cannot silently become mutually exclusive again.
+    petWindow.setPosition(200, 200);
+    const dragStart = petWindow.getBounds();
+    const dragX = Math.round(petContentBounds.width / 2);
+    const dragY = Math.round(petContentBounds.height / 3);
+    petWindow.webContents.sendInputEvent({
+      type: "mouseDown",
+      x: dragX,
+      y: dragY,
+      button: "left",
+      clickCount: 1,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const dragStateAfterDown = await petWindow.webContents.executeJavaScript(
+      `document.querySelector('#pet-avatar')?.dataset.dragging ?? null`,
+    );
+    petWindow.webContents.sendInputEvent({
+      type: "mouseMove",
+      x: dragX + 24,
+      y: dragY + 16,
+      button: "left",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    petWindow.webContents.sendInputEvent({
+      type: "mouseUp",
+      x: dragX,
+      y: dragY,
+      button: "left",
+      clickCount: 1,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const dragEnd = petWindow.getBounds();
+    if (dragEnd.x === dragStart.x && dragEnd.y === dragStart.y) {
+      throw new Error(
+        `Pet manual drag smoke check failed: ${JSON.stringify({ dragStart, dragEnd, dragStateAfterDown })}`,
       );
     }
 
@@ -536,10 +637,10 @@ async function verifySmokeBoundary(): Promise<void> {
     `);
     if (
       !sessionResult.ok ||
-      sessionResult.appInfo.version !== "0.1.0-prototype.5" ||
+      sessionResult.appInfo.version !== "0.1.0-prototype.6" ||
       sessionResult.updateStatus.phase !== "not-checked" ||
-      sessionResult.updateStatus.currentVersion !== "0.1.0-prototype.5" ||
-      !sessionResult.renderedUpdateStatus?.includes("0.1.0-prototype.5") ||
+      sessionResult.updateStatus.currentVersion !== "0.1.0-prototype.6" ||
+      !sessionResult.renderedUpdateStatus?.includes("0.1.0-prototype.6") ||
       !sessionResult.updateCheckEnabled ||
       !sessionResult.updateReleaseHidden ||
       (expectsSmokeRecovery &&
