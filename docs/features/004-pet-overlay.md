@@ -40,15 +40,18 @@ A small transparent pet window remains visually present without disrupting norma
 
 The asset-driven renderer prototype is implemented. It bundles the approved
 Shokupan-cat runtime frames locally, maps every `SessionPhase` exhaustively to
-an accessible presentation, holds calm states on a neutral frame, and runs the
-focused breathing loop at 600ms per frame. Reduced motion collapses the loop to
-one still frame and does not schedule a timer. The pet remains a button that
-opens settings and now subscribes to a sanitized live session projection from
-the main process. The projection contains only the focus contract, phase,
-counters, and available controls; current non-target application details remain
-inside the privileged runtime. Automated tests cover every phase mapping and
-bundled asset path, and the Electron startup smoke test verifies that the pet
-follows a live session through stop.
+an accessible presentation, and gives both the ready and focused states a
+low-arousal sleeping loop: two slow breaths, an occasional ear twitch, and a
+settle. The data-driven timeline uses per-frame timing instead of a fixed-rate
+slideshow so future pet packs can replace the cadence cleanly. Reduced motion
+collapses the loop to one still frame and does not schedule a timer. The pet
+remains a button that opens settings and subscribes to a sanitized live session
+projection from the main process. The projection contains only the focus
+contract, phase, counters, and available controls; current non-target
+application details remain inside the privileged runtime. Automated tests cover
+every phase mapping, timeline timing and cancellation, and bundled asset path;
+the Electron startup smoke test verifies that the pet follows a live session
+through stop.
 
 Still pending before this feature can be implemented or verified: persisting
 drag position, recovering the pet after display changes, manual

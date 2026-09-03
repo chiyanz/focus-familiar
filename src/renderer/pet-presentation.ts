@@ -27,12 +27,16 @@ export type PetAssetPath =
 
 export type PetPresentationMode = "still" | "loop";
 
-export const PET_FRAME_DURATION_MS = 600 as const;
-
 type NonEmptyReadonlyArray<T> = readonly [T, ...T[]];
 
+export interface PetAnimationStep {
+  readonly asset: PetAssetPath;
+  /** How long this frame remains visible. `null` means no timer is scheduled. */
+  readonly durationMs: number | null;
+}
+
 export interface PetPresentationDefinition {
-  readonly frames: NonEmptyReadonlyArray<PetAssetPath>;
+  readonly timeline: NonEmptyReadonlyArray<PetAnimationStep>;
   readonly mode: PetPresentationMode;
   readonly provisional: boolean;
   readonly statusText: string;
@@ -41,21 +45,30 @@ export interface PetPresentationDefinition {
 export interface PetPresentation extends PetPresentationDefinition {
   readonly phase: SessionPhase;
   readonly reducedMotion: boolean;
-  /** `null` means that the presentation must not schedule a timer. */
-  readonly frameDurationMs: number | null;
 }
 
-/** The calm loop is intentionally ordered as a low-arousal breathing cycle. */
-export const FOCUSED_IDLE_LOOP_FRAMES = [
-  PET_ASSET_PATHS.idleNeutral,
-  PET_ASSET_PATHS.idleInhaleStart,
-  PET_ASSET_PATHS.idleInhalePeak,
-  PET_ASSET_PATHS.idleExhaleStart,
-  PET_ASSET_PATHS.idleEarTurn,
-  PET_ASSET_PATHS.idleEarTwitch,
-  PET_ASSET_PATHS.idleSettle,
-  PET_ASSET_PATHS.idleClose,
-] as const satisfies NonEmptyReadonlyArray<PetAssetPath>;
+/**
+ * A low-arousal sleep cycle: two unhurried breaths, one quick ear twitch,
+ * then a long settle. Per-frame timing avoids the mechanical feel of a
+ * fixed-rate slideshow and gives future pet packs an explicit cadence to
+ * replace.
+ */
+export const SLEEPING_BREATH_TIMELINE = [
+  { asset: PET_ASSET_PATHS.idleNeutral, durationMs: 1_100 },
+  { asset: PET_ASSET_PATHS.idleInhaleStart, durationMs: 520 },
+  { asset: PET_ASSET_PATHS.idleInhalePeak, durationMs: 720 },
+  { asset: PET_ASSET_PATHS.idleExhaleStart, durationMs: 620 },
+  { asset: PET_ASSET_PATHS.idleNeutral, durationMs: 1_000 },
+  { asset: PET_ASSET_PATHS.idleInhaleStart, durationMs: 520 },
+  { asset: PET_ASSET_PATHS.idleInhalePeak, durationMs: 720 },
+  { asset: PET_ASSET_PATHS.idleExhaleStart, durationMs: 620 },
+  { asset: PET_ASSET_PATHS.idleNeutral, durationMs: 1_300 },
+  { asset: PET_ASSET_PATHS.idleEarTurn, durationMs: 260 },
+  { asset: PET_ASSET_PATHS.idleEarTwitch, durationMs: 220 },
+  { asset: PET_ASSET_PATHS.idleEarTurn, durationMs: 240 },
+  { asset: PET_ASSET_PATHS.idleSettle, durationMs: 800 },
+  { asset: PET_ASSET_PATHS.idleClose, durationMs: 1_400 },
+] as const satisfies NonEmptyReadonlyArray<PetAnimationStep>;
 
 /**
  * Every session phase has an explicit presentation. The `satisfies` check is
@@ -64,49 +77,49 @@ export const FOCUSED_IDLE_LOOP_FRAMES = [
  */
 export const PET_PRESENTATIONS = {
   idle: {
-    frames: [PET_ASSET_PATHS.idleNeutral],
-    mode: "still",
+    timeline: SLEEPING_BREATH_TIMELINE,
+    mode: "loop",
     provisional: false,
     statusText: "Ready when you are.",
   },
   focused: {
-    frames: FOCUSED_IDLE_LOOP_FRAMES,
+    timeline: SLEEPING_BREATH_TIMELINE,
     mode: "loop",
     provisional: false,
     statusText: "Focused with you.",
   },
   grace: {
-    frames: [PET_ASSET_PATHS.graceGlance],
+    timeline: [{ asset: PET_ASSET_PATHS.graceGlance, durationMs: null }],
     mode: "still",
     provisional: false,
     statusText: "A gentle glance. Come back when ready.",
   },
   nudge: {
-    frames: [PET_ASSET_PATHS.nudgeStare],
+    timeline: [{ asset: PET_ASSET_PATHS.nudgeStare, durationMs: null }],
     mode: "still",
     provisional: false,
     statusText: "Let’s return to your focus app.",
   },
   intervention: {
-    frames: [PET_ASSET_PATHS.interventionWait],
+    timeline: [{ asset: PET_ASSET_PATHS.interventionWait, durationMs: null }],
     mode: "still",
     provisional: true,
     statusText: "Please return to your focus app.",
   },
   paused: {
-    frames: [PET_ASSET_PATHS.idleNeutral],
+    timeline: [{ asset: PET_ASSET_PATHS.idleNeutral, durationMs: null }],
     mode: "still",
     provisional: false,
     statusText: "Focus session paused.",
   },
   completed: {
-    frames: [PET_ASSET_PATHS.forwardStretch],
+    timeline: [{ asset: PET_ASSET_PATHS.forwardStretch, durationMs: null }],
     mode: "still",
     provisional: true,
     statusText: "Focus session complete.",
   },
   stopped: {
-    frames: [PET_ASSET_PATHS.idleNeutral],
+    timeline: [{ asset: PET_ASSET_PATHS.idleNeutral, durationMs: null }],
     mode: "still",
     provisional: false,
     statusText: "Focus session stopped.",
@@ -115,8 +128,7 @@ export const PET_PRESENTATIONS = {
 
 /**
  * Resolve one immutable renderer presentation for a core phase. Reduced
- * motion collapses even the focused loop to its first frame and removes the
- * timer interval entirely.
+ * motion collapses every loop to its first frame and removes its timer.
  */
 export function getPetPresentation(
   phase: SessionPhase,
@@ -126,15 +138,17 @@ export function getPetPresentation(
   const shouldAnimate =
     !reducedMotion &&
     definition.mode === "loop" &&
-    definition.frames.length > 1;
+    definition.timeline.length > 1;
+  const firstStep = definition.timeline[0];
 
   return {
     phase,
-    frames: shouldAnimate ? definition.frames : [definition.frames[0]],
+    timeline: shouldAnimate
+      ? definition.timeline
+      : [{ asset: firstStep.asset, durationMs: null }],
     mode: shouldAnimate ? "loop" : "still",
     provisional: definition.provisional,
     statusText: definition.statusText,
     reducedMotion,
-    frameDurationMs: shouldAnimate ? PET_FRAME_DURATION_MS : null,
   };
 }

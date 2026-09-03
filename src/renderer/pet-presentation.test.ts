@@ -6,11 +6,10 @@ import { describe, expect, it } from "vitest";
 
 import { SESSION_PHASES, type SessionPhase } from "../core";
 import {
-  FOCUSED_IDLE_LOOP_FRAMES,
   getPetPresentation,
   PET_ASSET_PATHS,
-  PET_FRAME_DURATION_MS,
   PET_PRESENTATIONS,
+  SLEEPING_BREATH_TIMELINE,
 } from "./pet-presentation";
 
 const rendererDirectory = dirname(fileURLToPath(import.meta.url));
@@ -34,63 +33,60 @@ describe("pet presentation", () => {
     },
   );
 
-  it("holds the neutral frame while idle, paused, and stopped", () => {
-    for (const phase of ["idle", "paused", "stopped"] as const) {
+  it("holds the neutral frame while paused and stopped", () => {
+    for (const phase of ["paused", "stopped"] as const) {
       expect(getPetPresentation(phase)).toMatchObject({
-        frames: [PET_ASSET_PATHS.idleNeutral],
+        timeline: [{ asset: PET_ASSET_PATHS.idleNeutral, durationMs: null }],
         mode: "still",
-        frameDurationMs: null,
         provisional: false,
       });
     }
   });
 
-  it("animates the focused state with the ordered calm loop", () => {
-    expect(getPetPresentation("focused")).toMatchObject({
-      frames: FOCUSED_IDLE_LOOP_FRAMES,
-      mode: "loop",
-      frameDurationMs: PET_FRAME_DURATION_MS,
-      provisional: false,
-    });
+  it("animates idle and focused states with the sleeping breath timeline", () => {
+    for (const phase of ["idle", "focused"] as const) {
+      expect(getPetPresentation(phase)).toMatchObject({
+        timeline: SLEEPING_BREATH_TIMELINE,
+        mode: "loop",
+        provisional: false,
+      });
+    }
   });
 
   it("uses the locked reaction stills for grace and nudge", () => {
     expect(getPetPresentation("grace")).toMatchObject({
-      frames: [PET_ASSET_PATHS.graceGlance],
+      timeline: [{ asset: PET_ASSET_PATHS.graceGlance, durationMs: null }],
       mode: "still",
-      frameDurationMs: null,
       provisional: false,
     });
     expect(getPetPresentation("nudge")).toMatchObject({
-      frames: [PET_ASSET_PATHS.nudgeStare],
+      timeline: [{ asset: PET_ASSET_PATHS.nudgeStare, durationMs: null }],
       mode: "still",
-      frameDurationMs: null,
       provisional: false,
     });
   });
 
   it("marks intervention and completed art as provisional", () => {
     expect(getPetPresentation("intervention")).toMatchObject({
-      frames: [PET_ASSET_PATHS.interventionWait],
+      timeline: [{ asset: PET_ASSET_PATHS.interventionWait, durationMs: null }],
       mode: "still",
-      frameDurationMs: null,
       provisional: true,
     });
     expect(getPetPresentation("completed")).toMatchObject({
-      frames: [PET_ASSET_PATHS.forwardStretch],
+      timeline: [{ asset: PET_ASSET_PATHS.forwardStretch, durationMs: null }],
       mode: "still",
-      frameDurationMs: null,
       provisional: true,
     });
   });
 
-  it("collapses the focused loop to one frame for reduced motion", () => {
-    expect(getPetPresentation("focused", true)).toMatchObject({
-      frames: [PET_ASSET_PATHS.idleNeutral],
-      mode: "still",
-      frameDurationMs: null,
-      reducedMotion: true,
-    });
+  it("collapses idle and focused loops to one frame for reduced motion", () => {
+    for (const phase of ["idle", "focused"] as const) {
+      expect(getPetPresentation(phase, true)).toMatchObject({
+        timeline: [{ asset: PET_ASSET_PATHS.idleNeutral, durationMs: null }],
+        mode: "still",
+        reducedMotion: true,
+      });
+    }
   });
 
   it("keeps all mapped asset paths local and bundled", () => {
@@ -104,10 +100,15 @@ describe("pet presentation", () => {
     }
   });
 
-  it("uses a low-arousal 600ms focused frame interval", () => {
-    expect(PET_FRAME_DURATION_MS).toBe(600);
-    expect(getPetPresentation("focused").frameDurationMs).toBe(600);
-    expect(getPetPresentation("focused", true).frameDurationMs).toBeNull();
-    expect(getPetPresentation("grace").frameDurationMs).toBeNull();
+  it("uses a slow, non-uniform breathing cadence", () => {
+    const durations = SLEEPING_BREATH_TIMELINE.map(
+      ({ durationMs }) => durationMs,
+    );
+
+    expect(new Set(durations).size).toBeGreaterThan(4);
+    expect(Math.min(...durations)).toBeGreaterThanOrEqual(200);
+    expect(durations.reduce((total, duration) => total + duration, 0)).toBe(
+      10_040,
+    );
   });
 });
