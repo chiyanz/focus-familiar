@@ -369,7 +369,11 @@ h2 {
   object-fit: contain;
   image-rendering: pixelated;
   filter: drop-shadow(0 18px 12px rgb(90 57 61 / 13%));
-  animation: pet-float 3.4s ease-in-out infinite;
+  transform-origin: 50% 90%;
+}
+
+.pet-stage[data-motion="ambient"] img {
+  animation: loaf-breath 5.8s ease-in-out infinite;
 }
 
 .pet-plinth {
@@ -712,14 +716,14 @@ h2 {
   box-shadow: none;
 }
 
-@keyframes pet-float {
+@keyframes loaf-breath {
   0%,
   100% {
-    transform: translateY(3px);
+    transform: translateY(0) scale(1);
   }
 
-  50% {
-    transform: translateY(-4px);
+  48% {
+    transform: translateY(-0.25%) scaleX(1.004) scaleY(1.012);
   }
 }
 

@@ -6,8 +6,11 @@ import { describe, expect, it } from "vitest";
 
 import { SESSION_PHASES, type SessionPhase } from "../core";
 import {
+  canPlayPetHoverAction,
+  choosePetHoverAction,
   getPetPresentation,
   PET_ASSET_PATHS,
+  PET_HOVER_ACTIONS,
   PET_PRESENTATIONS,
   SLEEPING_BREATH_TIMELINE,
 } from "./pet-presentation";
@@ -29,6 +32,7 @@ describe("pet presentation", () => {
       expect(presentation.phase).toBe(phase);
       expect(presentation.statusText).not.toContain("bundle");
       expect(presentation.statusText).not.toContain("URL");
+      expect(presentation.statusText).not.toMatch(/\.$/);
       expect(presentation.reducedMotion).toBe(false);
     },
   );
@@ -43,11 +47,11 @@ describe("pet presentation", () => {
     }
   });
 
-  it("animates idle and focused states with the sleeping breath timeline", () => {
+  it("animates idle and focused states from one stable sleeping frame", () => {
     for (const phase of ["idle", "focused"] as const) {
       expect(getPetPresentation(phase)).toMatchObject({
         timeline: SLEEPING_BREATH_TIMELINE,
-        mode: "loop",
+        mode: "ambient",
         provisional: false,
       });
     }
@@ -100,15 +104,43 @@ describe("pet presentation", () => {
     }
   });
 
-  it("uses a slow, non-uniform breathing cadence", () => {
-    const durations = SLEEPING_BREATH_TIMELINE.map(
-      ({ durationMs }) => durationMs,
-    );
+  it("keeps ambient breathing on one baseline-stable sprite", () => {
+    expect(SLEEPING_BREATH_TIMELINE).toEqual([
+      { asset: PET_ASSET_PATHS.idleNeutral, durationMs: null },
+    ]);
+  });
 
-    expect(new Set(durations).size).toBeGreaterThan(4);
-    expect(Math.min(...durations)).toBeGreaterThanOrEqual(200);
-    expect(durations.reduce((total, duration) => total + duration, 0)).toBe(
-      10_040,
+  it("selects non-repeating hover actions with an injected random value", () => {
+    expect(choosePetHoverAction(0).id).toBe("ear-twitch");
+    expect(choosePetHoverAction(0.999).id).toBe("sleepy-blink");
+    expect(choosePetHoverAction(0, "ear-twitch").id).toBe("sleepy-blink");
+    expect(choosePetHoverAction(Number.NaN, "sleepy-blink").id).toBe(
+      "ear-twitch",
     );
+  });
+
+  it("reserves hover actions for full-motion ambient phases", () => {
+    for (const phase of SESSION_PHASES) {
+      expect(canPlayPetHoverAction(phase, false)).toBe(
+        phase === "idle" || phase === "focused",
+      );
+      expect(canPlayPetHoverAction(phase, true)).toBe(false);
+    }
+  });
+
+  it("keeps distraction reaction art out of hover actions", () => {
+    const reactionAssets = new Set<string>([
+      PET_ASSET_PATHS.graceGlance,
+      PET_ASSET_PATHS.nudgeStare,
+      PET_ASSET_PATHS.interventionWait,
+    ]);
+
+    expect(PET_HOVER_ACTIONS).toHaveLength(2);
+    for (const action of PET_HOVER_ACTIONS) {
+      expect(action.timeline.at(-1)?.asset).toBe(PET_ASSET_PATHS.idleNeutral);
+      for (const step of action.timeline) {
+        expect(reactionAssets.has(step.asset)).toBe(false);
+      }
+    }
   });
 });

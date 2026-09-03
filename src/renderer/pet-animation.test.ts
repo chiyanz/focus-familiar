@@ -89,4 +89,49 @@ describe("pet animation player", () => {
     expect(pending.size).toBe(0);
     expect(showAsset).toHaveBeenCalledOnce();
   });
+
+  it("plays a one-shot timeline once and reports completion", () => {
+    const rendered: string[] = [];
+    const onComplete = vi.fn();
+    const { clock, pending, runNext } = createClock();
+
+    startPetAnimation(
+      [
+        { asset: PET_ASSET_PATHS.idleNeutral, durationMs: 120 },
+        { asset: PET_ASSET_PATHS.idleEarTurn, durationMs: 180 },
+      ],
+      (asset) => rendered.push(asset),
+      clock,
+      { loop: false, onComplete },
+    );
+
+    runNext();
+    runNext();
+
+    expect(rendered).toEqual([
+      PET_ASSET_PATHS.idleNeutral,
+      PET_ASSET_PATHS.idleEarTurn,
+    ]);
+    expect(onComplete).toHaveBeenCalledOnce();
+    expect(pending.size).toBe(0);
+  });
+
+  it("does not complete a cancelled one-shot timeline", () => {
+    const onComplete = vi.fn();
+    const { clock, pending } = createClock();
+    const stop = startPetAnimation(
+      [
+        { asset: PET_ASSET_PATHS.idleNeutral, durationMs: 120 },
+        { asset: PET_ASSET_PATHS.idleEarTurn, durationMs: 180 },
+      ],
+      vi.fn(),
+      clock,
+      { loop: false, onComplete },
+    );
+
+    stop();
+
+    expect(pending.size).toBe(0);
+    expect(onComplete).not.toHaveBeenCalled();
+  });
 });

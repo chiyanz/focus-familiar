@@ -16,6 +16,7 @@ const requiredScripts = [
   "typecheck",
   "test",
   "test:sprite-edges",
+  "test:sprite-alignment",
   "verify",
   "prototype",
   "release:macos",

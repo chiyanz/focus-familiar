@@ -7,6 +7,7 @@ import UniformTypeIdentifiers
 
 private let alphaOpaqueThreshold: UInt8 = 240
 private let searchRadius = 3
+private let outlineRadius = 4
 private let outlineColor: (red: UInt8, green: UInt8, blue: UInt8) = (106, 53, 25)
 
 struct ProcessedSprite {
@@ -64,10 +65,16 @@ do {
       guard processed.transparentPixels > 0 else {
         throw SpriteError.validationFailed(inputPath, "the background is not transparent")
       }
+      guard processed.clearedTransparentPixels == 0 else {
+        throw SpriteError.validationFailed(
+          inputPath,
+          "\(processed.clearedTransparentPixels) fully transparent pixels contain non-zero RGB data"
+        )
+      }
       guard processed.addedOutlinePixels == 0 else {
         throw SpriteError.validationFailed(
           inputPath,
-          "\(processed.addedOutlinePixels) silhouette pixels still need the polished outline"
+          "\(processed.addedOutlinePixels) silhouette pixels still need the \(outlineRadius)-pixel polished outline"
         )
       }
       guard processed.recoloredPixels == 0 else {
@@ -142,7 +149,8 @@ func polishSprite(at url: URL) throws -> ProcessedSprite {
   var partialAlphaPixels = 0
   var recoloredPixels = 0
   var transparentPixels = 0
-  var clearedTransparentPixels = 0
+  let sourceTransparentRGBPixels = countRawTransparentRGBPixels(in: image)
+  var convertedTransparentRGBPixels = 0
   var addedOutlinePixels = 0
   var recoloredCanvasEdgePixels = 0
 
@@ -154,7 +162,7 @@ func polishSprite(at url: URL) throws -> ProcessedSprite {
       if alpha == 0 {
         transparentPixels += 1
         if pixels[offset] != 0 || pixels[offset + 1] != 0 || pixels[offset + 2] != 0 {
-          clearedTransparentPixels += 1
+          convertedTransparentRGBPixels += 1
         }
         pixels[offset] = 0
         pixels[offset + 1] = 0
@@ -187,6 +195,11 @@ func polishSprite(at url: URL) throws -> ProcessedSprite {
       pixels[offset + 2] = blue
     }
   }
+  let exteriorTransparency = exteriorTransparentMask(
+    pixels: original,
+    width: width,
+    height: height
+  )
 
   // Cropped reaction art can touch a canvas boundary, where there is no room
   // to add an exterior pixel. Color only those outermost opaque pixels with
@@ -225,21 +238,43 @@ func polishSprite(at url: URL) throws -> ProcessedSprite {
     }
   }
 
-  // The source sprites use hard alpha, so pale silhouette pixels can touch a
-  // dark desktop directly and read as a white fringe. Add one consistent
-  // pixel of the existing dark-brown line color outside the silhouette. The
-  // original opaque artwork and canvas dimensions remain unchanged.
+  // Build the contour from non-contour artwork, rather than from the current
+  // alpha mask. That makes this pass idempotent: the cocoa pixels it adds are
+  // excluded from the next run, so the border cannot grow on repeated runs.
+  var coreArtwork = [Bool](repeating: false, count: width * height)
+  for y in 0 ..< height {
+    for x in 0 ..< width {
+      coreArtwork[y * width + x] = isCoreArtworkPixel(
+        x: x,
+        y: y,
+        pixels: original,
+        width: width
+      )
+    }
+  }
+
+  var requiredOutline = [Bool](repeating: false, count: width * height)
+  for y in 0 ..< height {
+    for x in 0 ..< width {
+      guard coreArtwork[y * width + x] else { continue }
+      for sampleY in max(0, y - outlineRadius) ... min(height - 1, y + outlineRadius) {
+        for sampleX in max(0, x - outlineRadius) ... min(width - 1, x + outlineRadius) {
+          requiredOutline[sampleY * width + sampleX] = true
+        }
+      }
+    }
+  }
+
+  // Downscaling can skip a one-pixel contour. Add a deterministic four
+  // source-pixel cocoa contour around the non-outline silhouette. The
+  // Chebyshev radius matches the existing 8-neighbour pixel-art edge rule,
+  // including diagonals at rounded corners.
   for y in 0 ..< height {
     for x in 0 ..< width {
       let offset = pixelOffset(x: x, y: y, width: width)
       guard original[offset + 3] == 0 else { continue }
-      guard touchesUnoutlinedOpaquePixel(
-        x: x,
-        y: y,
-        pixels: original,
-        width: width,
-        height: height
-      ) else { continue }
+      guard exteriorTransparency[y * width + x] else { continue }
+      guard requiredOutline[y * width + x] else { continue }
 
       pixels[offset] = outlineColor.red
       pixels[offset + 1] = outlineColor.green
@@ -286,10 +321,66 @@ func polishSprite(at url: URL) throws -> ProcessedSprite {
     partialAlphaPixels: partialAlphaPixels,
     recoloredPixels: recoloredPixels,
     transparentPixels: transparentPixels,
-    clearedTransparentPixels: clearedTransparentPixels,
+    clearedTransparentPixels: max(sourceTransparentRGBPixels, convertedTransparentRGBPixels),
     addedOutlinePixels: addedOutlinePixels,
     recoloredCanvasEdgePixels: recoloredCanvasEdgePixels
   )
+}
+
+// A premultiplied bitmap context turns RGB channels to zero when alpha is
+// zero. Inspect the decoded image's original provider as well, otherwise a
+// stale PNG can hide a white matte from the validator while it is being
+// normalized for output.
+func countRawTransparentRGBPixels(in image: CGImage) -> Int {
+  guard
+    image.bitsPerComponent == 8,
+    image.bitsPerPixel >= 32,
+    let provider = image.dataProvider,
+    let data = provider.data,
+    let pointer = CFDataGetBytePtr(data)
+  else { return 0 }
+
+  let bytesPerPixel = image.bitsPerPixel / 8
+  let bytesPerRow = image.bytesPerRow > 0 ? image.bytesPerRow : image.width * bytesPerPixel
+  let alphaInfo = image.alphaInfo
+  let alphaOffset: Int
+  let redOffset: Int
+  let greenOffset: Int
+  let blueOffset: Int
+
+  switch alphaInfo {
+  case .last, .premultipliedLast:
+    alphaOffset = 3
+    redOffset = 0
+    greenOffset = 1
+    blueOffset = 2
+  case .first, .premultipliedFirst:
+    alphaOffset = 0
+    redOffset = 1
+    greenOffset = 2
+    blueOffset = 3
+  default:
+    return 0
+  }
+
+  let length = CFDataGetLength(data)
+  var count = 0
+  for y in 0 ..< image.height {
+    let rowOffset = y * bytesPerRow
+    for x in 0 ..< image.width {
+      let offset = rowOffset + x * bytesPerPixel
+      guard offset + alphaOffset < length else { return count }
+      guard pointer[offset + alphaOffset] == 0 else { continue }
+      guard
+        offset + blueOffset < length,
+        pointer[offset + redOffset] != 0
+          || pointer[offset + greenOffset] != 0
+          || pointer[offset + blueOffset] != 0
+      else { continue }
+      count += 1
+    }
+  }
+  return count
 }
 
 func polishCanvasEdgePixel(
@@ -312,25 +403,68 @@ func polishCanvasEdgePixel(
   return 1
 }
 
-func touchesUnoutlinedOpaquePixel(
+func isCoreArtworkPixel(
   x: Int,
   y: Int,
   pixels: [UInt8],
+  width: Int
+) -> Bool {
+  let offset = pixelOffset(x: x, y: y, width: width)
+  let alpha = pixels[offset + 3]
+  guard alpha >= alphaOpaqueThreshold else { return false }
+
+  let red = unpremultiply(pixels[offset], by: alpha)
+  let green = unpremultiply(pixels[offset + 1], by: alpha)
+  let blue = unpremultiply(pixels[offset + 2], by: alpha)
+  return red != outlineColor.red
+    || green != outlineColor.green
+    || blue != outlineColor.blue
+}
+
+// Only exterior transparency receives a silhouette contour. Closed holes in
+// future artwork remain transparent instead of being accidentally filled.
+func exteriorTransparentMask(
+  pixels: [UInt8],
   width: Int,
   height: Int
-) -> Bool {
-  for sampleY in max(0, y - 1) ... min(height - 1, y + 1) {
-    for sampleX in max(0, x - 1) ... min(width - 1, x + 1) {
-      guard sampleX != x || sampleY != y else { continue }
-      let offset = pixelOffset(x: sampleX, y: sampleY, width: width)
-      guard pixels[offset + 3] >= alphaOpaqueThreshold else { continue }
-      let isExistingPolishedOutline = pixels[offset] == outlineColor.red
-        && pixels[offset + 1] == outlineColor.green
-        && pixels[offset + 2] == outlineColor.blue
-      if !isExistingPolishedOutline { return true }
+) -> [Bool] {
+  var exterior = [Bool](repeating: false, count: width * height)
+  var queue: [Int] = []
+
+  func enqueueIfTransparent(_ x: Int, _ y: Int) {
+    let index = y * width + x
+    guard !exterior[index] else { return }
+    let offset = pixelOffset(x: x, y: y, width: width)
+    guard pixels[offset + 3] == 0 else { return }
+    exterior[index] = true
+    queue.append(index)
+  }
+
+  for x in 0 ..< width {
+    enqueueIfTransparent(x, 0)
+    if height > 1 { enqueueIfTransparent(x, height - 1) }
+  }
+  if width > 1 {
+    for y in 1 ..< max(1, height - 1) {
+      enqueueIfTransparent(0, y)
+      enqueueIfTransparent(width - 1, y)
     }
   }
-  return false
+
+  var queueIndex = 0
+  while queueIndex < queue.count {
+    let index = queue[queueIndex]
+    queueIndex += 1
+    let x = index % width
+    let y = index / width
+
+    if x > 0 { enqueueIfTransparent(x - 1, y) }
+    if x + 1 < width { enqueueIfTransparent(x + 1, y) }
+    if y > 0 { enqueueIfTransparent(x, y - 1) }
+    if y + 1 < height { enqueueIfTransparent(x, y + 1) }
+  }
+
+  return exterior
 }
 
 func nearestInteriorColor(

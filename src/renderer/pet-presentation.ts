@@ -25,7 +25,7 @@ export const PET_ASSET_PATHS = {
 export type PetAssetPath =
   (typeof PET_ASSET_PATHS)[keyof typeof PET_ASSET_PATHS];
 
-export type PetPresentationMode = "still" | "loop";
+export type PetPresentationMode = "still" | "ambient";
 
 type NonEmptyReadonlyArray<T> = readonly [T, ...T[]];
 
@@ -47,28 +47,68 @@ export interface PetPresentation extends PetPresentationDefinition {
   readonly reducedMotion: boolean;
 }
 
+export interface PetHoverAction {
+  readonly id: "ear-twitch" | "sleepy-blink";
+  readonly timeline: NonEmptyReadonlyArray<PetAnimationStep>;
+}
+
 /**
- * A low-arousal sleep cycle: two unhurried breaths, one quick ear twitch,
- * then a long settle. Per-frame timing avoids the mechanical feel of a
- * fixed-rate slideshow and gives future pet packs an explicit cadence to
- * replace.
+ * Ambient breathing uses one stable sprite plus a continuous CSS transform.
+ * Keeping the baseline fixed avoids visible jumps between independently
+ * generated keyframes while still giving the loaf a quiet breathing rhythm.
  */
 export const SLEEPING_BREATH_TIMELINE = [
-  { asset: PET_ASSET_PATHS.idleNeutral, durationMs: 1_100 },
-  { asset: PET_ASSET_PATHS.idleInhaleStart, durationMs: 520 },
-  { asset: PET_ASSET_PATHS.idleInhalePeak, durationMs: 720 },
-  { asset: PET_ASSET_PATHS.idleExhaleStart, durationMs: 620 },
-  { asset: PET_ASSET_PATHS.idleNeutral, durationMs: 1_000 },
-  { asset: PET_ASSET_PATHS.idleInhaleStart, durationMs: 520 },
-  { asset: PET_ASSET_PATHS.idleInhalePeak, durationMs: 720 },
-  { asset: PET_ASSET_PATHS.idleExhaleStart, durationMs: 620 },
-  { asset: PET_ASSET_PATHS.idleNeutral, durationMs: 1_300 },
-  { asset: PET_ASSET_PATHS.idleEarTurn, durationMs: 260 },
-  { asset: PET_ASSET_PATHS.idleEarTwitch, durationMs: 220 },
-  { asset: PET_ASSET_PATHS.idleEarTurn, durationMs: 240 },
-  { asset: PET_ASSET_PATHS.idleSettle, durationMs: 800 },
-  { asset: PET_ASSET_PATHS.idleClose, durationMs: 1_400 },
+  { asset: PET_ASSET_PATHS.idleNeutral, durationMs: null },
 ] as const satisfies NonEmptyReadonlyArray<PetAnimationStep>;
+
+/**
+ * Short, one-shot ambient reactions. They intentionally reuse only idle art;
+ * focus-policy reactions remain reserved for grace and nudge states.
+ */
+export const PET_HOVER_ACTIONS = [
+  {
+    id: "ear-twitch",
+    timeline: [
+      { asset: PET_ASSET_PATHS.idleNeutral, durationMs: 120 },
+      { asset: PET_ASSET_PATHS.idleEarTurn, durationMs: 180 },
+      { asset: PET_ASSET_PATHS.idleEarTwitch, durationMs: 240 },
+      { asset: PET_ASSET_PATHS.idleEarTurn, durationMs: 180 },
+      { asset: PET_ASSET_PATHS.idleNeutral, durationMs: 280 },
+    ],
+  },
+  {
+    id: "sleepy-blink",
+    timeline: [
+      { asset: PET_ASSET_PATHS.idleNeutral, durationMs: 120 },
+      { asset: PET_ASSET_PATHS.idleSettle, durationMs: 180 },
+      { asset: PET_ASSET_PATHS.idleClose, durationMs: 520 },
+      { asset: PET_ASSET_PATHS.idleSettle, durationMs: 180 },
+      { asset: PET_ASSET_PATHS.idleNeutral, durationMs: 280 },
+    ],
+  },
+] as const satisfies readonly PetHoverAction[];
+
+export function choosePetHoverAction(
+  randomValue: number,
+  previousActionId?: PetHoverAction["id"],
+): PetHoverAction {
+  const availableActions = PET_HOVER_ACTIONS.filter(
+    ({ id }) => id !== previousActionId,
+  );
+  const normalizedRandomValue = Number.isFinite(randomValue)
+    ? Math.min(Math.max(randomValue, 0), 1 - Number.EPSILON)
+    : 0;
+  const index = Math.floor(normalizedRandomValue * availableActions.length);
+
+  return availableActions[index] ?? PET_HOVER_ACTIONS[0];
+}
+
+export function canPlayPetHoverAction(
+  phase: SessionPhase,
+  reducedMotion: boolean,
+): boolean {
+  return !reducedMotion && (phase === "idle" || phase === "focused");
+}
 
 /**
  * Every session phase has an explicit presentation. The `satisfies` check is
@@ -78,75 +118,69 @@ export const SLEEPING_BREATH_TIMELINE = [
 export const PET_PRESENTATIONS = {
   idle: {
     timeline: SLEEPING_BREATH_TIMELINE,
-    mode: "loop",
+    mode: "ambient",
     provisional: false,
-    statusText: "Ready when you are.",
+    statusText: "Ready when you are",
   },
   focused: {
     timeline: SLEEPING_BREATH_TIMELINE,
-    mode: "loop",
+    mode: "ambient",
     provisional: false,
-    statusText: "Focused with you.",
+    statusText: "Focused with you",
   },
   grace: {
     timeline: [{ asset: PET_ASSET_PATHS.graceGlance, durationMs: null }],
     mode: "still",
     provisional: false,
-    statusText: "A gentle glance. Come back when ready.",
+    statusText: "A gentle glance · come back when ready",
   },
   nudge: {
     timeline: [{ asset: PET_ASSET_PATHS.nudgeStare, durationMs: null }],
     mode: "still",
     provisional: false,
-    statusText: "Let’s return to your focus app.",
+    statusText: "Let’s return to your focus app",
   },
   intervention: {
     timeline: [{ asset: PET_ASSET_PATHS.interventionWait, durationMs: null }],
     mode: "still",
     provisional: true,
-    statusText: "Please return to your focus app.",
+    statusText: "Please return to your focus app",
   },
   paused: {
     timeline: [{ asset: PET_ASSET_PATHS.idleNeutral, durationMs: null }],
     mode: "still",
     provisional: false,
-    statusText: "Focus session paused.",
+    statusText: "Focus session paused",
   },
   completed: {
     timeline: [{ asset: PET_ASSET_PATHS.forwardStretch, durationMs: null }],
     mode: "still",
     provisional: true,
-    statusText: "Focus session complete.",
+    statusText: "Focus session complete",
   },
   stopped: {
     timeline: [{ asset: PET_ASSET_PATHS.idleNeutral, durationMs: null }],
     mode: "still",
     provisional: false,
-    statusText: "Focus session stopped.",
+    statusText: "Focus session stopped",
   },
 } as const satisfies Record<SessionPhase, PetPresentationDefinition>;
 
 /**
  * Resolve one immutable renderer presentation for a core phase. Reduced
- * motion collapses every loop to its first frame and removes its timer.
+ * motion collapses ambient movement to a calm still.
  */
 export function getPetPresentation(
   phase: SessionPhase,
   reducedMotion = false,
 ): PetPresentation {
   const definition = PET_PRESENTATIONS[phase];
-  const shouldAnimate =
-    !reducedMotion &&
-    definition.mode === "loop" &&
-    definition.timeline.length > 1;
-  const firstStep = definition.timeline[0];
+  const shouldAnimate = !reducedMotion && definition.mode === "ambient";
 
   return {
     phase,
-    timeline: shouldAnimate
-      ? definition.timeline
-      : [{ asset: firstStep.asset, durationMs: null }],
-    mode: shouldAnimate ? "loop" : "still",
+    timeline: definition.timeline,
+    mode: shouldAnimate ? "ambient" : "still",
     provisional: definition.provisional,
     statusText: definition.statusText,
     reducedMotion,

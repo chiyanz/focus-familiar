@@ -38,5 +38,7 @@ jobs:
         run: npm ci
       - name: Validate transparent sprite borders
         run: npm run test:sprite-edges
+      - name: Validate idle-loop alignment
+        run: npm run test:sprite-alignment
       - name: Run Electron smoke test
         run: npm run test:electron-smoke

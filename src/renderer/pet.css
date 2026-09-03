@@ -51,6 +51,30 @@ body {
   object-fit: contain;
   image-rendering: pixelated;
   pointer-events: none;
+  transform-origin: 50% 90%;
+  will-change: transform;
+}
+
+.pet-shell[data-pet-motion="ambient"] .pet img {
+  animation: loaf-breath 5.8s ease-in-out infinite;
+}
+
+@keyframes loaf-breath {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+
+  48% {
+    transform: translateY(-0.25%) scaleX(1.004) scaleY(1.012);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pet-shell .pet img {
+    animation: none;
+    transform: none;
+  }
 }
 
 .hint {

@@ -14,15 +14,19 @@ import nudgeStareUrl from "./assets/shokupan-cat/reactions/reaction-03-half-lens
 import type { SessionPhase } from "../shared/ipc";
 import { startPetAnimation } from "./pet-animation";
 import {
+  canPlayPetHoverAction,
+  choosePetHoverAction,
   getPetPresentation,
   PET_ASSET_PATHS,
   type PetAssetPath,
+  type PetHoverAction,
 } from "./pet-presentation";
 import "./pet.css";
 
 const sessionApi = window.focusFamiliar;
 
 const petShell = document.querySelector<HTMLElement>(".pet-shell");
+const petAvatar = document.querySelector<HTMLElement>("#pet-avatar");
 const petImage = document.querySelector<HTMLImageElement>("#pet-image");
 const petHint = document.querySelector<HTMLElement>("#pet-hint");
 const settingsButton =
@@ -46,9 +50,55 @@ const petAssetUrls: Record<PetAssetPath, string> = {
   [PET_ASSET_PATHS.forwardStretch]: idleForwardStretchUrl,
 };
 
+// Decode the local hover frames before the first reaction so a cold image load
+// cannot leave a blank frame in a one-second action.
+const hoverAssetsReady = Promise.allSettled(
+  [
+    PET_ASSET_PATHS.idleNeutral,
+    PET_ASSET_PATHS.idleEarTurn,
+    PET_ASSET_PATHS.idleEarTwitch,
+    PET_ASSET_PATHS.idleSettle,
+    PET_ASSET_PATHS.idleClose,
+  ].map(async (asset) => {
+    const preload = new Image();
+    preload.decoding = "async";
+    preload.src = petAssetUrls[asset];
+    await preload.decode();
+  }),
+);
+
 let currentPhase: SessionPhase | undefined;
 let currentReducedMotion: boolean | undefined;
 let stopAnimation: (() => void) | undefined;
+let currentHoverAction: PetHoverAction | undefined;
+let previousHoverActionId: PetHoverAction["id"] | undefined;
+let pointerInsideAvatar = false;
+
+function showPetAsset(asset: PetAssetPath): void {
+  if (petImage) petImage.src = petAssetUrls[asset];
+}
+
+function renderCurrentPhasePresentation(): void {
+  const phase = currentPhase ?? "idle";
+  const reducedMotion = currentReducedMotion ?? reducedMotionQuery.matches;
+  const presentation = getPetPresentation(phase, reducedMotion);
+
+  if (petShell) {
+    petShell.dataset.petPhase = phase;
+    petShell.dataset.petMotion = presentation.mode;
+    petShell.dataset.reducedMotion = String(reducedMotion);
+    delete petShell.dataset.petAction;
+  }
+  if (petHint) petHint.textContent = presentation.statusText;
+
+  currentHoverAction = undefined;
+  stopPetAnimation();
+  stopAnimation = startPetAnimation(
+    presentation.timeline,
+    showPetAsset,
+    window,
+  );
+}
 
 /**
  * Render a phase without knowing anything about foreground activity. The
@@ -65,23 +115,7 @@ export function renderPetPhase(
 
   currentPhase = phase;
   currentReducedMotion = reducedMotion;
-  const presentation = getPetPresentation(phase, reducedMotion);
-
-  if (petShell) petShell.dataset.petPhase = phase;
-  if (petShell) petShell.dataset.reducedMotion = String(reducedMotion);
-  if (petHint) petHint.textContent = presentation.statusText;
-
-  stopPetAnimation();
-
-  if (petImage) {
-    stopAnimation = startPetAnimation(
-      presentation.timeline,
-      (asset) => {
-        petImage.src = petAssetUrls[asset];
-      },
-      window,
-    );
-  }
+  renderCurrentPhasePresentation();
 }
 
 function stopPetAnimation(): void {
@@ -89,8 +123,48 @@ function stopPetAnimation(): void {
   stopAnimation = undefined;
 }
 
+async function playRandomHoverAction(): Promise<void> {
+  await hoverAssetsReady;
+  const phase = currentPhase ?? "idle";
+  const reducedMotion = currentReducedMotion ?? reducedMotionQuery.matches;
+  if (
+    !pointerInsideAvatar ||
+    currentHoverAction ||
+    !canPlayPetHoverAction(phase, reducedMotion)
+  ) {
+    return;
+  }
+
+  const action = choosePetHoverAction(Math.random(), previousHoverActionId);
+  currentHoverAction = action;
+  previousHoverActionId = action.id;
+  stopPetAnimation();
+
+  if (petShell) {
+    petShell.dataset.petMotion = "hover-action";
+    petShell.dataset.petAction = action.id;
+  }
+  stopAnimation = startPetAnimation(action.timeline, showPetAsset, window, {
+    loop: false,
+    onComplete: () => {
+      // A focus-state transition cancels this player, so completion can only
+      // restore the still-current ambient phase.
+      if (currentHoverAction !== action) return;
+      renderCurrentPhasePresentation();
+    },
+  });
+}
+
 settingsButton?.addEventListener("click", () => {
   void window.focusFamiliar.requestWindowAction("show-settings");
+});
+
+petAvatar?.addEventListener("mouseenter", () => {
+  pointerInsideAvatar = true;
+  void playRandomHoverAction();
+});
+petAvatar?.addEventListener("mouseleave", () => {
+  pointerInsideAvatar = false;
 });
 
 reducedMotionQuery.addEventListener("change", () => {
@@ -113,7 +187,7 @@ try {
     .getSessionSnapshot()
     .then(({ phase }) => renderPetPhase(phase))
     .catch(() => {
-      if (petHint) petHint.textContent = "Ready when you are.";
+      if (petHint) petHint.textContent = "Ready when you are";
     });
 } catch {
   // A renderer opened against an older development preload can still show
