@@ -4,9 +4,9 @@ Focus Familiar is a local-first desktop pet for macOS that helps you stay with t
 
 > [!NOTE]
 > A local macOS prototype can run complete focus sessions from the settings
-> window and safely restores interrupted work in a paused state. Window-position
-> recovery and a signed release are still being completed in small, reviewable
-> slices.
+> window, restores interrupted work in a paused state, and remembers the pet's
+> size and screen position. A signed release is still being completed in small,
+> reviewable slices.
 
 ## Version 0.1
 
@@ -16,6 +16,7 @@ The initial experience will let someone:
 
 1. Choose a task, focus duration, and target macOS application.
 2. See a small, transparent pet above normal windows.
+   Drag the avatar to move it, or adjust its size from settings.
 3. Receive progressively stronger nudges after leaving the target application.
 4. Return to the target application from the intervention.
 5. Stop or pause a session at any time through an obvious safety control.

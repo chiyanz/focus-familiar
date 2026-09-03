@@ -4,6 +4,8 @@ import {
   isWindowAction,
   parseAppInfo,
   parseApplicationList,
+  parsePetWindowPreferences,
+  parsePetWindowSize,
   parseSessionAction,
   parseSessionPreferences,
   parsePreferencesFlushRequestId,
@@ -14,6 +16,7 @@ import {
   type FocusFamiliarApi,
   type IpcChannel,
   type IpcEvent,
+  type PetWindowPreferences,
   type SessionAction,
   type SessionSnapshot,
   type SessionPreferences,
@@ -40,6 +43,20 @@ export function createPreloadApi(invoker: PreloadInvoker): FocusFamiliarApi {
       }
 
       await invoker.invoke(IPC_CHANNELS.windowAction, action);
+    },
+    getPetWindowPreferences: async (): Promise<PetWindowPreferences> => {
+      const response = await invoker.invoke(
+        IPC_CHANNELS.getPetWindowPreferences,
+      );
+      return parsePetWindowPreferences(response);
+    },
+    setPetWindowSize: async (sizePx: number): Promise<PetWindowPreferences> => {
+      const normalizedSize = parsePetWindowSize(sizePx);
+      const response = await invoker.invoke(
+        IPC_CHANNELS.setPetWindowSize,
+        normalizedSize,
+      );
+      return parsePetWindowPreferences(response);
     },
     listApplications: async (): Promise<readonly ApplicationSummary[]> => {
       const response = await invoker.invoke(IPC_CHANNELS.listApplications);

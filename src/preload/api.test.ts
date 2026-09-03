@@ -35,6 +35,7 @@ const validPreferences: SessionPreferences = {
   interventionAfterMs: 90 * 1000,
   intensity: "balanced",
 };
+const validPetWindowPreferences = { sizePx: 248 };
 
 describe("preload API", () => {
   it("exposes only the documented renderer operations", async () => {
@@ -46,6 +47,12 @@ describe("preload API", () => {
         return [
           { bundleId: "com.microsoft.VSCode", name: "Visual Studio Code" },
         ];
+      }
+      if (channel === "settings:get-pet-window-preferences") {
+        return validPetWindowPreferences;
+      }
+      if (channel === "settings:set-pet-window-size") {
+        return { sizePx: payload };
       }
       if (
         channel === "settings:get-session-preferences" ||
@@ -64,6 +71,8 @@ describe("preload API", () => {
     expect(Object.keys(api)).toEqual([
       "getAppInfo",
       "requestWindowAction",
+      "getPetWindowPreferences",
+      "setPetWindowSize",
       "listApplications",
       "getSessionSnapshot",
       "startSession",
@@ -79,6 +88,10 @@ describe("preload API", () => {
       platform: "darwin",
     });
     await api.requestWindowAction("show-settings");
+    await expect(api.getPetWindowPreferences()).resolves.toEqual(
+      validPetWindowPreferences,
+    );
+    await expect(api.setPetWindowSize(320)).resolves.toEqual({ sizePx: 320 });
     await expect(api.listApplications()).resolves.toEqual([
       { bundleId: "com.microsoft.VSCode", name: "Visual Studio Code" },
     ]);
@@ -113,21 +126,30 @@ describe("preload API", () => {
     );
     expect(invoke).toHaveBeenNthCalledWith(1, "app:get-info");
     expect(invoke).toHaveBeenNthCalledWith(2, "window:action", "show-settings");
-    expect(invoke).toHaveBeenNthCalledWith(3, "applications:list");
+    expect(invoke).toHaveBeenNthCalledWith(
+      3,
+      "settings:get-pet-window-preferences",
+    );
     expect(invoke).toHaveBeenNthCalledWith(
       4,
+      "settings:set-pet-window-size",
+      320,
+    );
+    expect(invoke).toHaveBeenNthCalledWith(5, "applications:list");
+    expect(invoke).toHaveBeenNthCalledWith(
+      6,
       "settings:get-session-preferences",
     );
     expect(invoke).toHaveBeenNthCalledWith(
-      5,
+      7,
       "settings:save-session-preferences",
       {
         ...validPreferences,
         taskDraft: "  Build the prototype  ",
       },
     );
-    expect(invoke).toHaveBeenNthCalledWith(6, "session:get");
-    expect(invoke).toHaveBeenNthCalledWith(7, "session:start", {
+    expect(invoke).toHaveBeenNthCalledWith(8, "session:get");
+    expect(invoke).toHaveBeenNthCalledWith(9, "session:start", {
       task: "Build the prototype",
       targetApplication: {
         bundleId: "com.microsoft.VSCode",
@@ -138,7 +160,7 @@ describe("preload API", () => {
       interventionAfterMs: 90 * 1000,
       intensity: "balanced",
     });
-    expect(invoke).toHaveBeenNthCalledWith(8, "session:action", "pause");
+    expect(invoke).toHaveBeenNthCalledWith(10, "session:action", "pause");
     expect(on).not.toHaveBeenCalled();
   });
 
@@ -153,6 +175,7 @@ describe("preload API", () => {
     await expect(
       api.requestSessionAction("run-shell-command" as never),
     ).rejects.toThrow("Unknown session action.");
+    await expect(api.setPetWindowSize(159)).rejects.toThrow("Pet size");
     expect(invoke).not.toHaveBeenCalled();
   });
 
@@ -171,6 +194,9 @@ describe("preload API", () => {
     );
     await expect(api.getSessionPreferences()).rejects.toThrow(
       "Task draft must be a string.",
+    );
+    await expect(api.getPetWindowPreferences()).rejects.toThrow(
+      "Malformed pet window preferences.",
     );
     await expect(api.saveSessionPreferences(validPreferences)).rejects.toThrow(
       "Task draft must be a string.",

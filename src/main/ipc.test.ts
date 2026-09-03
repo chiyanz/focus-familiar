@@ -185,6 +185,10 @@ describe("session IPC handlers", () => {
       interventionAfterMs: config.interventionAfterMs,
       intensity: config.intensity,
     };
+    let petWindowSize = 248;
+    const setPetWindowSize = vi.fn(async (sizePx: number) => {
+      petWindowSize = sizePx;
+    });
     const removeHandler = vi.fn();
     const acknowledgePreferencesFlush = vi.fn();
     const dispose = registerIpcHandlers({
@@ -218,6 +222,8 @@ describe("session IPC handlers", () => {
           return { ok: true };
         },
       }),
+      getPetWindowSize: () => petWindowSize,
+      setPetWindowSize,
       acknowledgePreferencesFlush,
       createSessionId: () => "generated-session",
     });
@@ -230,6 +236,13 @@ describe("session IPC handlers", () => {
       editor,
       browser,
     ]);
+    expect(
+      handlers.get("settings:get-pet-window-preferences")?.(event),
+    ).toEqual({ sizePx: 248 });
+    await expect(
+      handlers.get("settings:set-pet-window-size")?.(event, 320),
+    ).resolves.toEqual({ sizePx: 320 });
+    expect(setPetWindowSize).toHaveBeenCalledWith(320);
     await expect(
       handlers.get("session:start")?.(event, config),
     ).resolves.toMatchObject({ phase: "focused" });
@@ -263,7 +276,7 @@ describe("session IPC handlers", () => {
     expect(acknowledgePreferencesFlush).toHaveBeenCalledWith("request-1");
 
     dispose();
-    expect(removeHandler).toHaveBeenCalledTimes(9);
+    expect(removeHandler).toHaveBeenCalledTimes(11);
   });
 
   it("rejects session operations when the macOS service is unavailable", async () => {
@@ -286,6 +299,10 @@ describe("session IPC handlers", () => {
       getApplicationProvider: () => undefined,
       getSessionController: () => undefined,
       getSettingsController: () => undefined,
+      getPetWindowSize: () => undefined,
+      setPetWindowSize: async () => {
+        throw new Error("Pet window preferences are unavailable.");
+      },
       acknowledgePreferencesFlush: vi.fn(),
       createSessionId: () => "unused",
     });
@@ -295,5 +312,11 @@ describe("session IPC handlers", () => {
     } as never;
 
     expect(() => handlers.get("session:get")?.(event)).toThrow("unavailable");
+    expect(() =>
+      handlers.get("settings:get-pet-window-preferences")?.(event),
+    ).toThrow("unavailable");
+    await expect(
+      handlers.get("settings:set-pet-window-size")?.(event, 159),
+    ).rejects.toThrow("Pet size");
   });
 });

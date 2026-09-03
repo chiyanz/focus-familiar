@@ -8,6 +8,7 @@ import {
   BrowserWindow,
   dialog,
   ipcMain,
+  screen,
   type MessageBoxOptions,
 } from "electron";
 
@@ -25,7 +26,9 @@ import {
 } from "./settings-repository";
 import {
   getWindowOptions,
+  clampPetWindowBounds,
   loadRendererWindow,
+  resizePetWindowBounds,
   resolveRendererTarget,
   type WindowKind,
 } from "./windows";
@@ -33,6 +36,8 @@ import { ChildProcessNativeHelperRunner } from "../platform/macos/helper-runner"
 import { MacOSApplicationAdapter } from "../platform/macos/macos-application-adapter";
 import {
   createPausedSessionFromRecovery,
+  PET_WINDOW_SIZE_DEFAULT,
+  type PetWindowPlacement,
   type PausedSessionRecovery,
 } from "../core";
 import type { ActivityProvider, Clock } from "../platform/application";
@@ -53,6 +58,9 @@ let restoredRecovery: PausedSessionRecovery | null = null;
 let quitPreparation: Promise<void> | undefined;
 let isReadyToQuit = false;
 let didShowCheckpointFailure = false;
+let didShowPetPlacementFailure = false;
+let petPlacementSaveTimer: ReturnType<typeof setTimeout> | undefined;
+let isDisplayRecoveryInstalled = false;
 let pendingPreferencesFlush:
   | { readonly requestId: string; readonly resolve: () => void }
   | undefined;
@@ -78,6 +86,9 @@ if (!app.requestSingleInstanceLock()) {
         getApplicationProvider: () => applicationProvider,
         getSessionController: () => sessionRuntime,
         getSettingsController: () => localSettings,
+        getPetWindowSize: () =>
+          localSettings?.petWindowPreferences().petWindowSize,
+        setPetWindowSize: updatePetWindowSize,
         acknowledgePreferencesFlush: acknowledgePreferencesFlush,
         createSessionId: randomUUID,
       });
@@ -163,10 +174,19 @@ async function loadLocalSettings(): Promise<void> {
 async function createApplicationWindows(): Promise<void> {
   managedWindows.splice(0, managedWindows.length);
   await Promise.all([createWindow("pet"), createWindow("settings")]);
+  installDisplayRecovery();
 }
 
 async function createWindow(kind: WindowKind): Promise<void> {
-  const window = new BrowserWindow(getWindowOptions(kind, preloadPath));
+  const petPreferences =
+    kind === "pet" ? localSettings?.petWindowPreferences() : undefined;
+  const window = new BrowserWindow(
+    getWindowOptions(
+      kind,
+      preloadPath,
+      petPreferences?.petWindowSize ?? PET_WINDOW_SIZE_DEFAULT,
+    ),
+  );
   const target = resolveRendererTarget(kind, {
     rendererDirectory,
     ...(process.env.ELECTRON_RENDERER_URL
@@ -175,6 +195,10 @@ async function createWindow(kind: WindowKind): Promise<void> {
   });
 
   managedWindows.push({ kind, window, target });
+  if (kind === "pet") {
+    restorePetWindowPlacement(window, petPreferences?.petWindowPlacement);
+    window.on("move", schedulePetWindowPlacementSave);
+  }
   if (kind === "settings") {
     window.on("close", (event) => {
       if (!isQuitting) {
@@ -184,11 +208,121 @@ async function createWindow(kind: WindowKind): Promise<void> {
     });
   }
   window.on("closed", () => {
+    if (kind === "pet") clearPetWindowPlacementTimer();
     const index = managedWindows.findIndex((entry) => entry.window === window);
     if (index >= 0) managedWindows.splice(index, 1);
   });
 
   await loadRendererWindow(window, target);
+}
+
+async function updatePetWindowSize(sizePx: number): Promise<void> {
+  const settings = localSettings;
+  if (!settings) throw new Error("Local settings are unavailable.");
+
+  const saved = await settings.updatePetWindowSize(sizePx);
+  if (!saved.ok) throw new Error(saved.error.message);
+
+  const petWindow = findWindow("pet");
+  if (!petWindow || petWindow.isDestroyed()) {
+    throw new Error("The pet window is unavailable.");
+  }
+
+  const currentBounds = petWindow.getBounds();
+  const display = screen.getDisplayMatching(currentBounds);
+  const nextBounds = resizePetWindowBounds(
+    currentBounds,
+    sizePx,
+    display.workArea,
+  );
+  petWindow.setBounds(nextBounds);
+  await persistPetWindowPlacement();
+}
+
+function restorePetWindowPlacement(
+  petWindow: BrowserWindow,
+  placement: PetWindowPlacement | null | undefined,
+): void {
+  if (!placement) return;
+
+  const targetDisplay =
+    screen
+      .getAllDisplays()
+      .find((display) => String(display.id) === placement.displayId) ??
+    screen.getDisplayNearestPoint({ x: placement.x, y: placement.y });
+  const bounds = clampPetWindowBounds(
+    placement.x,
+    placement.y,
+    petWindow.getBounds().width,
+    targetDisplay.workArea,
+  );
+  petWindow.setBounds(bounds);
+}
+
+function schedulePetWindowPlacementSave(): void {
+  clearPetWindowPlacementTimer();
+  petPlacementSaveTimer = setTimeout(() => {
+    petPlacementSaveTimer = undefined;
+    void persistPetWindowPlacement();
+  }, 250);
+}
+
+async function persistPetWindowPlacement(): Promise<void> {
+  clearPetWindowPlacementTimer();
+  const settings = localSettings;
+  const petWindow = findWindow("pet");
+  if (!settings || !petWindow || petWindow.isDestroyed()) return;
+
+  const bounds = petWindow.getBounds();
+  const display = screen.getDisplayMatching(bounds);
+  const result = await settings.updatePetWindowPlacement({
+    displayId: String(display.id),
+    x: bounds.x,
+    y: bounds.y,
+  });
+  if (result.ok || didShowPetPlacementFailure) return;
+
+  didShowPetPlacementFailure = true;
+  console.error(`Pet placement unavailable: ${result.error.message}`);
+  showRuntimeNotice(
+    "Pet position could not be saved",
+    "You can keep using and moving Focus Familiar, but its position may reset after relaunch.",
+  );
+}
+
+function clearPetWindowPlacementTimer(): void {
+  if (petPlacementSaveTimer === undefined) return;
+  clearTimeout(petPlacementSaveTimer);
+  petPlacementSaveTimer = undefined;
+}
+
+function installDisplayRecovery(): void {
+  if (isDisplayRecoveryInstalled) return;
+  isDisplayRecoveryInstalled = true;
+  screen.on("display-removed", recoverPetWindowToVisibleArea);
+  screen.on("display-metrics-changed", recoverPetWindowToVisibleArea);
+}
+
+function recoverPetWindowToVisibleArea(): void {
+  const petWindow = findWindow("pet");
+  if (!petWindow || petWindow.isDestroyed()) return;
+
+  const currentBounds = petWindow.getBounds();
+  const display = screen.getDisplayMatching(currentBounds);
+  const recoveredBounds = clampPetWindowBounds(
+    currentBounds.x,
+    currentBounds.y,
+    currentBounds.width,
+    display.workArea,
+  );
+  if (
+    recoveredBounds.x !== currentBounds.x ||
+    recoveredBounds.y !== currentBounds.y ||
+    recoveredBounds.width !== currentBounds.width ||
+    recoveredBounds.height !== currentBounds.height
+  ) {
+    petWindow.setBounds(recoveredBounds);
+  }
 }
 
 function findWindow(kind: WindowKind): BrowserWindow | undefined {
@@ -209,6 +343,17 @@ async function verifySmokeBoundary(): Promise<void> {
         return image instanceof HTMLImageElement
           ? { exists: true, complete: image.complete, naturalWidth: image.naturalWidth }
           : { exists: false, complete: false, naturalWidth: 0 };
+      })(),
+      petDragContract: (() => {
+        const avatar = document.querySelector('#pet-avatar');
+        const settingsButton = document.querySelector('#open-settings');
+        if (!(avatar instanceof HTMLElement) || !(settingsButton instanceof HTMLElement)) {
+          return { avatar: '', settings: '' };
+        }
+        return {
+          avatar: getComputedStyle(avatar).getPropertyValue('-webkit-app-region'),
+          settings: getComputedStyle(settingsButton).getPropertyValue('-webkit-app-region')
+        };
       })()
     })`);
 
@@ -222,10 +367,12 @@ async function verifySmokeBoundary(): Promise<void> {
       kind === "pet" &&
       (!result.petImage.exists ||
         !result.petImage.complete ||
-        result.petImage.naturalWidth <= 0)
+        result.petImage.naturalWidth <= 0 ||
+        result.petDragContract.avatar !== "drag" ||
+        result.petDragContract.settings !== "no-drag")
     ) {
       throw new Error(
-        `Pet asset smoke check failed: ${JSON.stringify(result.petImage)}`,
+        `Pet renderer smoke check failed: ${JSON.stringify(result)}`,
       );
     }
   }
@@ -233,10 +380,13 @@ async function verifySmokeBoundary(): Promise<void> {
   if (process.platform === "darwin") {
     const settingsWindow = findWindow("settings");
     if (!settingsWindow) throw new Error("Settings window is unavailable.");
+    const initialPetBounds = findWindow("pet")?.getBounds();
     const sessionResult = await settingsWindow.webContents.executeJavaScript(`
       (async () => {
         const initial = await window.focusFamiliar.getSessionSnapshot();
         const initialPreferences = await window.focusFamiliar.getSessionPreferences();
+        const initialPetWindowPreferences = await window.focusFamiliar.getPetWindowPreferences();
+        const savedPetWindowPreferences = await window.focusFamiliar.setPetWindowSize(320);
         const initialSelectedTarget = document.querySelector("#target-application")?.value;
         if (initial.phase === "paused") {
           await window.focusFamiliar.requestSessionAction("stop");
@@ -273,6 +423,8 @@ async function verifySmokeBoundary(): Promise<void> {
           ok: true,
           initial,
           initialPreferences,
+          initialPetWindowPreferences,
+          savedPetWindowPreferences,
           initialSelectedTarget,
           savedPreferences,
           applicationCount: applications.length,
@@ -292,8 +444,12 @@ async function verifySmokeBoundary(): Promise<void> {
           sessionResult.initialSelectedTarget !==
             "com.example.RecoveredEditor" ||
           sessionResult.initialPreferences.taskDraft !==
-            "Recovered smoke draft")) ||
+            "Recovered smoke draft" ||
+          sessionResult.initialPetWindowPreferences.sizePx !== 280 ||
+          initialPetBounds?.width !== 280 ||
+          initialPetBounds?.height !== 280)) ||
       sessionResult.savedPreferences.taskDraft !== "Saved smoke draft" ||
+      sessionResult.savedPetWindowPreferences.sizePx !== 320 ||
       sessionResult.applicationCount < 1 ||
       sessionResult.phases[1] !== "paused" ||
       sessionResult.phases[3] !== "stopped" ||
@@ -312,6 +468,12 @@ async function verifySmokeBoundary(): Promise<void> {
     );
     if (petPhase !== "stopped") {
       throw new Error(`Pet live phase smoke check failed: ${String(petPhase)}`);
+    }
+    const petBounds = findWindow("pet")?.getBounds();
+    if (petBounds?.width !== 320 || petBounds.height !== 320) {
+      throw new Error(
+        `Pet resize smoke check failed: ${JSON.stringify(petBounds)}`,
+      );
     }
   }
 }
@@ -395,6 +557,7 @@ async function startApplicationAwareness(): Promise<void> {
 
 async function prepareToQuit(): Promise<void> {
   await flushRendererPreferences();
+  await persistPetWindowPlacement();
 
   const runtime = sessionRuntime;
   const settings = localSettings;

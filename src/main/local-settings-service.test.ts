@@ -3,6 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   createDefaultSettings,
   createIdleSession,
+  PET_WINDOW_SIZE_DEFAULT,
+  PET_WINDOW_SIZE_MAX,
+  PET_WINDOW_SIZE_MIN,
   reduceSession,
   type FocusSessionConfig,
   type SettingsDocument,
@@ -50,6 +53,98 @@ class FakeRepository implements LocalSettingsRepository {
 }
 
 describe("local settings service", () => {
+  it("reads pet preferences with a defensive placement copy", async () => {
+    const repository = new FakeRepository();
+    repository.stored = {
+      ...repository.stored,
+      preferences: {
+        ...repository.stored.preferences,
+        petWindowSize: 320,
+        petWindowPlacement: { displayId: "main", x: 40, y: 80 },
+      },
+    };
+    const service = new LocalSettingsService(repository);
+    await service.load();
+
+    const first = service.petWindowPreferences();
+    const second = service.petWindowPreferences();
+
+    expect(first).toEqual({
+      petWindowSize: 320,
+      petWindowPlacement: { displayId: "main", x: 40, y: 80 },
+    });
+    expect(first).not.toBe(second);
+    expect(first.petWindowPlacement).not.toBe(second.petWindowPlacement);
+    if (!first.petWindowPlacement) throw new Error("expected placement");
+    (first.petWindowPlacement as { x: number }).x = 999;
+    expect(service.petWindowPreferences().petWindowPlacement?.x).toBe(40);
+  });
+
+  it.each([PET_WINDOW_SIZE_MIN, PET_WINDOW_SIZE_DEFAULT, PET_WINDOW_SIZE_MAX])(
+    "persists supported pet size %d",
+    async (petWindowSize) => {
+      const repository = new FakeRepository();
+      const service = new LocalSettingsService(repository);
+      await service.load();
+
+      const result = await service.updatePetWindowSize(petWindowSize);
+
+      expect(result).toMatchObject({ ok: true });
+      expect(service.petWindowPreferences().petWindowSize).toBe(petWindowSize);
+      expect(repository.stored.preferences.petWindowSize).toBe(petWindowSize);
+    },
+  );
+
+  it.each([
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    PET_WINDOW_SIZE_MIN - 1,
+    PET_WINDOW_SIZE_MAX + 1,
+    248.5,
+    "320",
+    null,
+  ])("rejects invalid pet size %j without writing", async (petWindowSize) => {
+    const repository = new FakeRepository();
+    const service = new LocalSettingsService(repository);
+    await service.load();
+
+    const result = await service.updatePetWindowSize(petWindowSize as number);
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "settings-validation-failed" },
+    });
+    expect(repository.writes).toHaveLength(0);
+    expect(service.petWindowPreferences().petWindowSize).toBe(
+      PET_WINDOW_SIZE_DEFAULT,
+    );
+  });
+
+  it("serializes size and placement writes while preserving both updates", async () => {
+    const repository = new FakeRepository();
+    const service = new LocalSettingsService(repository);
+    await service.load();
+    const placement = { displayId: "main", x: 40, y: 80 };
+
+    const sizeWrite = service.updatePetWindowSize(360);
+    const placementWrite = service.updatePetWindowPlacement(placement);
+    placement.x = 999;
+    placement.y = 999;
+    await Promise.all([sizeWrite, placementWrite]);
+
+    expect(repository.writes).toHaveLength(2);
+    expect(repository.stored.preferences.petWindowSize).toBe(360);
+    expect(repository.stored.preferences.petWindowPlacement).toEqual({
+      displayId: "main",
+      x: 40,
+      y: 80,
+    });
+    expect(service.petWindowPreferences()).toEqual({
+      petWindowSize: 360,
+      petWindowPlacement: { displayId: "main", x: 40, y: 80 },
+    });
+  });
+
   it("updates only session preferences and returns defensive target copies", async () => {
     const repository = new FakeRepository();
     const service = new LocalSettingsService(repository);

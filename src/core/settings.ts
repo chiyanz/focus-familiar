@@ -14,6 +14,11 @@ export const SETTINGS_SCHEMA_VERSION = 1 as const;
 export const MOTION_PREFERENCES = ["system", "reduced", "full"] as const;
 export type MotionPreference = (typeof MOTION_PREFERENCES)[number];
 
+/** Supported square pet-window sizes in CSS pixels. */
+export const PET_WINDOW_SIZE_MIN: number = 160;
+export const PET_WINDOW_SIZE_DEFAULT: number = 248;
+export const PET_WINDOW_SIZE_MAX: number = 480;
+
 /**
  * The only data needed to position the pet window after a restart.
  * Coordinates can be negative when a display is positioned to the left or
@@ -36,6 +41,7 @@ export interface SettingsPreferences {
   readonly soundEnabled: boolean;
   readonly motionPreference: MotionPreference;
   readonly launchAtLogin: boolean;
+  readonly petWindowSize: number;
   readonly petWindowPlacement: PetWindowPlacement | null;
 }
 
@@ -104,8 +110,18 @@ export const DEFAULT_SETTINGS_PREFERENCES: Readonly<SettingsPreferences> = {
   soundEnabled: true,
   motionPreference: "system",
   launchAtLogin: false,
+  petWindowSize: PET_WINDOW_SIZE_DEFAULT,
   petWindowPlacement: null,
 };
+
+/** Return whether a value is safe to persist as a pet-window size. */
+export function isValidPetWindowSize(input: unknown): input is number {
+  return (
+    isSafeInteger(input) &&
+    input >= PET_WINDOW_SIZE_MIN &&
+    input <= PET_WINDOW_SIZE_MAX
+  );
+}
 
 /**
  * Return a new default document. Every nested value is constructed afresh so
@@ -214,6 +230,7 @@ export function createPausedSessionFromRecovery(
  *   "soundEnabled": true,
  *   "motionPreference": "system",
  *   "launchAtLogin": false,
+ *   "petWindowSize": 320,
  *   "petWindowPlacement": {"displayId":"main","x":40,"y":80},
  *   "recovery": null
  * }
@@ -339,6 +356,7 @@ function normalizePreferences(
     defaults.launchAtLogin,
     issues,
   );
+  const petWindowSize = normalizePetWindowSizePreference(input, issues);
   const petWindowPlacement = normalizeNullablePlacementPreference(
     input,
     "petWindowPlacement",
@@ -356,8 +374,31 @@ function normalizePreferences(
     soundEnabled,
     motionPreference,
     launchAtLogin,
+    petWindowSize,
     petWindowPlacement,
   };
+}
+
+function normalizePetWindowSizePreference(
+  input: Record<string, unknown>,
+  issues: SettingsIssue[],
+): number {
+  const defaults = DEFAULT_SETTINGS_PREFERENCES;
+  if (!("petWindowSize" in input)) return defaults.petWindowSize;
+
+  const value = input.petWindowSize;
+  if (!isValidPetWindowSize(value)) {
+    issues.push(
+      issue(
+        "invalid-preference-field",
+        `Preference petWindowSize must be a whole number from ${PET_WINDOW_SIZE_MIN} to ${PET_WINDOW_SIZE_MAX}; its default was used.`,
+        "preferences.petWindowSize",
+      ),
+    );
+    return defaults.petWindowSize;
+  }
+
+  return value;
 }
 
 function normalizeTiming(
@@ -597,6 +638,10 @@ function migrateV0(input: Record<string, unknown>): Record<string, unknown> {
       soundEnabled: source.soundEnabled ?? defaults.soundEnabled,
       motionPreference: source.motionPreference ?? defaults.motionPreference,
       launchAtLogin: source.launchAtLogin ?? defaults.launchAtLogin,
+      petWindowSize:
+        source.petWindowSize ??
+        source.petWindowSizePx ??
+        defaults.petWindowSize,
       petWindowPlacement: source.petWindowPlacement ?? null,
     },
     recovery: source.recovery ?? null,
@@ -658,6 +703,7 @@ function clonePreferences(
     soundEnabled: preferences.soundEnabled,
     motionPreference: preferences.motionPreference,
     launchAtLogin: preferences.launchAtLogin,
+    petWindowSize: preferences.petWindowSize,
     petWindowPlacement: clonePlacement(preferences.petWindowPlacement),
   };
 }

@@ -7,6 +7,11 @@ import type {
   SessionStartConfig,
 } from "../shared/ipc";
 import {
+  PET_WINDOW_SIZE_DEFAULT,
+  PET_WINDOW_SIZE_MAX,
+  PET_WINDOW_SIZE_MIN,
+} from "../core/settings";
+import {
   areSessionPreferencesEqual,
   DEFAULT_SESSION_PREFERENCES,
   preferencesFromConfig,
@@ -46,6 +51,10 @@ const focusProgress =
 const statusDetail = document.querySelector<HTMLElement>("#status-detail");
 const formError = document.querySelector<HTMLElement>("#form-error");
 const saveStatus = document.querySelector<HTMLElement>("#save-status");
+const petSizeInput = document.querySelector<HTMLInputElement>("#pet-size");
+const petSizeValue =
+  document.querySelector<HTMLOutputElement>("#pet-size-value");
+const petSizeStatus = document.querySelector<HTMLElement>("#pet-size-status");
 
 const configurationControls = [
   taskInput,
@@ -92,6 +101,11 @@ let saveTimer: number | undefined;
 let saveGeneration = 0;
 let pendingPreferences: SessionPreferences | undefined;
 let inFlightSave: Promise<boolean> | undefined;
+let lastSavedPetSize = PET_WINDOW_SIZE_DEFAULT;
+let pendingPetSize: number | undefined;
+let petSizeSaveTimer: number | undefined;
+let petSizeSaveGeneration = 0;
+let petSizeSaveQueue: Promise<void> = Promise.resolve();
 
 if (sessionApi) {
   void sessionApi
@@ -143,6 +157,15 @@ durationInput?.addEventListener("input", () => {
   if (currentSnapshot?.capabilities.canStart) renderIdlePreview();
 });
 
+petSizeInput?.addEventListener("input", () => {
+  renderPetSizeValue(readPetSize() ?? PET_WINDOW_SIZE_DEFAULT);
+  schedulePetSizeSave();
+});
+
+petSizeInput?.addEventListener("change", () => {
+  void flushPendingPetSize();
+});
+
 for (const control of [
   taskInput,
   targetSelect,
@@ -176,13 +199,36 @@ try {
 void loadInitialState();
 
 async function loadInitialState(): Promise<void> {
-  await Promise.all([refreshApplications(), loadSessionSnapshot()]);
+  await Promise.all([
+    refreshApplications(),
+    loadSessionSnapshot(),
+    loadPetWindowPreferences(),
+  ]);
   await loadSessionPreferences();
   preferencesReady = true;
   if (currentSnapshot) applySnapshot(currentSnapshot);
   else renderIdlePreview();
   if (loadedPreferences && currentSnapshot?.capabilities.canStart) {
     applySavedPreferences(loadedPreferences);
+  }
+}
+
+async function loadPetWindowPreferences(): Promise<void> {
+  if (!sessionApi) {
+    renderPetSizeValue(PET_WINDOW_SIZE_DEFAULT);
+    setPetSizeStatus("Browser preview", "idle");
+    return;
+  }
+
+  try {
+    const preferences = await sessionApi.getPetWindowPreferences();
+    lastSavedPetSize = preferences.sizePx;
+    if (petSizeInput) petSizeInput.value = String(preferences.sizePx);
+    renderPetSizeValue(preferences.sizePx);
+    setPetSizeStatus("Saved locally", "saved");
+  } catch (error: unknown) {
+    setPetSizeStatus("Couldn’t load locally", "error");
+    showError(errorMessage(error, "Pet size could not be loaded."));
   }
 }
 
@@ -853,6 +899,106 @@ function setSaveStatus(
   saveStatus.dataset.saveState = state;
 }
 
+function readPetSize(): number | undefined {
+  return readInteger(
+    petSizeInput?.value,
+    PET_WINDOW_SIZE_MIN,
+    PET_WINDOW_SIZE_MAX,
+  );
+}
+
+function renderPetSizeValue(sizePx: number): void {
+  if (!petSizeValue) return;
+  const label = sizePx <= 200 ? "Small" : sizePx < 360 ? "Medium" : "Large";
+  petSizeValue.textContent = `${label} · ${sizePx} px`;
+}
+
+function setPetSizeStatus(
+  message: string,
+  state: "idle" | "saved" | "saving" | "error",
+): void {
+  if (!petSizeStatus) return;
+  petSizeStatus.textContent = message;
+  petSizeStatus.dataset.saveState = state;
+}
+
+function schedulePetSizeSave(): void {
+  if (!sessionApi) {
+    pendingPetSize = undefined;
+    setPetSizeStatus("Browser preview", "idle");
+    return;
+  }
+  if (petSizeSaveTimer !== undefined) {
+    window.clearTimeout(petSizeSaveTimer);
+    petSizeSaveTimer = undefined;
+  }
+
+  const sizePx = readPetSize();
+  if (sizePx === undefined) {
+    pendingPetSize = undefined;
+    petSizeSaveGeneration += 1;
+    setPetSizeStatus("Choose a valid size", "error");
+    return;
+  }
+  if (sizePx === lastSavedPetSize && pendingPetSize === undefined) {
+    setPetSizeStatus("Saved locally", "saved");
+    return;
+  }
+
+  pendingPetSize = sizePx;
+  const generation = ++petSizeSaveGeneration;
+  setPetSizeStatus("Adjusting…", "saving");
+  petSizeSaveTimer = window.setTimeout(() => {
+    petSizeSaveTimer = undefined;
+    const pendingSize = pendingPetSize;
+    pendingPetSize = undefined;
+    if (pendingSize === undefined) return;
+    void persistPetSize(pendingSize, generation);
+  }, 140);
+}
+
+async function persistPetSize(
+  sizePx: number,
+  generation: number,
+): Promise<void> {
+  if (!sessionApi) return;
+
+  const operation = petSizeSaveQueue.then(() =>
+    sessionApi.setPetWindowSize(sizePx),
+  );
+  petSizeSaveQueue = operation.then(
+    () => undefined,
+    () => undefined,
+  );
+
+  try {
+    const saved = await operation;
+    lastSavedPetSize = saved.sizePx;
+    if (generation !== petSizeSaveGeneration) return;
+    if (petSizeInput) petSizeInput.value = String(saved.sizePx);
+    renderPetSizeValue(saved.sizePx);
+    setPetSizeStatus("Saved locally", "saved");
+  } catch (error: unknown) {
+    if (generation !== petSizeSaveGeneration) return;
+    setPetSizeStatus("Couldn’t save locally", "error");
+    showError(errorMessage(error, "Pet size could not be saved."));
+  }
+}
+
+async function flushPendingPetSize(): Promise<void> {
+  if (petSizeSaveTimer !== undefined) {
+    window.clearTimeout(petSizeSaveTimer);
+    petSizeSaveTimer = undefined;
+  }
+
+  const sizePx = pendingPetSize;
+  pendingPetSize = undefined;
+  if (sizePx !== undefined && sizePx !== lastSavedPetSize) {
+    await persistPetSize(sizePx, petSizeSaveGeneration);
+  }
+  await petSizeSaveQueue;
+}
+
 async function quitApp(): Promise<void> {
   await flushPendingPreferences();
   await sessionApi?.requestWindowAction("quit");
@@ -869,6 +1015,7 @@ async function flushPendingPreferences(): Promise<void> {
       if (draft.ok) await savePreferencesBeforeStart(draft.preferences);
     }
   }
+  await flushPendingPetSize();
 }
 
 function isConfigurationLocked(): boolean {
@@ -961,6 +1108,10 @@ function errorMessage(error: unknown, fallback: string): string {
 
 window.addEventListener("beforeunload", () => {
   clearSaveTimer();
+  if (petSizeSaveTimer !== undefined) {
+    window.clearTimeout(petSizeSaveTimer);
+    petSizeSaveTimer = undefined;
+  }
   unsubscribeFromSession?.();
   unsubscribeFromPreferencesFlush?.();
   stopFocusDisplayTimer();

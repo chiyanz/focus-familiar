@@ -12,6 +12,7 @@ import type {
 import {
   IPC_CHANNELS,
   IPC_EVENTS,
+  parsePetWindowSize,
   parsePreferencesFlushRequestId,
   parseSessionAction,
   parseSessionPreferences,
@@ -19,6 +20,7 @@ import {
   parseWindowAction,
   toAppPlatform,
   type AppInfo,
+  type PetWindowPreferences,
   type SessionPreferences,
   type SessionSnapshot,
 } from "../shared/ipc";
@@ -43,6 +45,8 @@ export interface IpcDependencies {
     | undefined;
   readonly getSessionController: () => SessionController | undefined;
   readonly getSettingsController: () => SettingsController | undefined;
+  readonly getPetWindowSize: () => number | undefined;
+  readonly setPetWindowSize: (sizePx: number) => Promise<void>;
   readonly acknowledgePreferencesFlush: (requestId: string) => void;
   readonly createSessionId: () => string;
 }
@@ -102,6 +106,25 @@ export function registerIpcHandlers(dependencies: IpcDependencies): () => void {
         break;
     }
   });
+
+  ipcMain.handle(IPC_CHANNELS.getPetWindowPreferences, (event) => {
+    assertTrustedSender(event, getWindows());
+    const sizePx = requireService(
+      dependencies.getPetWindowSize(),
+      "Pet window preferences are unavailable.",
+    );
+    return { sizePx } satisfies PetWindowPreferences;
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.setPetWindowSize,
+    async (event, payload: unknown) => {
+      assertTrustedSender(event, getWindows());
+      const sizePx = parsePetWindowSize(payload);
+      await dependencies.setPetWindowSize(sizePx);
+      return { sizePx } satisfies PetWindowPreferences;
+    },
+  );
 
   ipcMain.handle(IPC_CHANNELS.listApplications, async (event) => {
     assertTrustedSender(event, getWindows());
@@ -193,6 +216,8 @@ export function registerIpcHandlers(dependencies: IpcDependencies): () => void {
   return () => {
     ipcMain.removeHandler(IPC_CHANNELS.getAppInfo);
     ipcMain.removeHandler(IPC_CHANNELS.windowAction);
+    ipcMain.removeHandler(IPC_CHANNELS.getPetWindowPreferences);
+    ipcMain.removeHandler(IPC_CHANNELS.setPetWindowSize);
     ipcMain.removeHandler(IPC_CHANNELS.listApplications);
     ipcMain.removeHandler(IPC_CHANNELS.getSessionSnapshot);
     ipcMain.removeHandler(IPC_CHANNELS.startSession);

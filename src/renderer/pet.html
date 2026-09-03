@@ -12,23 +12,26 @@
   </head>
   <body>
     <main class="pet-shell" data-pet-phase="idle" aria-label="Focus Familiar">
-      <button
+      <div
         class="pet"
+        id="pet-avatar"
+        role="img"
+        aria-label="Focus Familiar pet. Drag to move."
+      >
+        <img id="pet-image" alt="" aria-hidden="true" draggable="false" />
+      </div>
+      <button
+        class="hint"
         id="open-settings"
         type="button"
         aria-label="Open Focus Familiar settings"
+        title="Open settings"
       >
-        <img id="pet-image" alt="" aria-hidden="true" draggable="false" />
+        <span id="pet-hint" role="status" aria-live="polite" aria-atomic="true">
+          Ready when you are.
+        </span>
+        <span class="hint-action" aria-hidden="true">•••</span>
       </button>
-      <p
-        class="hint"
-        id="pet-hint"
-        role="status"
-        aria-live="polite"
-        aria-atomic="true"
-      >
-        Ready when you are.
-      </p>
     </main>
     <script type="module" src="./pet.ts"></script>
   </body>
