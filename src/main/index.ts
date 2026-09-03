@@ -146,16 +146,33 @@ async function verifySmokeBoundary(): Promise<void> {
   if (managedWindows.length !== 2)
     throw new Error("Smoke test expected two windows.");
 
-  for (const { window } of managedWindows) {
+  for (const { kind, window } of managedWindows) {
     const result = await window.webContents.executeJavaScript(`({
       hasBridge: typeof window.focusFamiliar === 'object',
       hasNodeRequire: typeof globalThis.require !== 'undefined',
-      hasNodeProcess: typeof globalThis.process !== 'undefined'
+      hasNodeProcess: typeof globalThis.process !== 'undefined',
+      petImage: (() => {
+        const image = document.querySelector('#pet-image');
+        return image instanceof HTMLImageElement
+          ? { exists: true, complete: image.complete, naturalWidth: image.naturalWidth }
+          : { exists: false, complete: false, naturalWidth: 0 };
+      })()
     })`);
 
     if (!result.hasBridge || result.hasNodeRequire || result.hasNodeProcess) {
       throw new Error(
         `Renderer security boundary smoke check failed: ${JSON.stringify(result)}`,
+      );
+    }
+
+    if (
+      kind === "pet" &&
+      (!result.petImage.exists ||
+        !result.petImage.complete ||
+        result.petImage.naturalWidth <= 0)
+    ) {
+      throw new Error(
+        `Pet asset smoke check failed: ${JSON.stringify(result.petImage)}`,
       );
     }
   }

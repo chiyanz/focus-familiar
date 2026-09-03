@@ -10,14 +10,16 @@ These files are both implementation plans and the durable status record for user
 - **Verified:** acceptance criteria have been exercised on a supported Mac.
 - **Deferred:** intentionally removed from the active sequence.
 
-The application shell, deterministic focus engine, and macOS application awareness are implemented; later version 0.1 product features remain planned.
+The application shell, deterministic focus engine, and macOS application
+awareness are implemented; the pet overlay is in progress while its renderer
+prototype is connected to live session state and window behavior.
 
 | Feature                                                     | Status      |
 | ----------------------------------------------------------- | ----------- |
 | [Application shell](001-application-shell.md)               | Implemented |
 | [Focus session engine](002-focus-session-engine.md)         | Implemented |
 | [Application awareness](003-application-awareness.md)       | Implemented |
-| [Pet overlay](004-pet-overlay.md)                           | Planned     |
+| [Pet overlay](004-pet-overlay.md)                           | In progress |
 | [Nudge escalation](005-nudge-escalation.md)                 | In progress |
 | [Settings and persistence](006-settings-and-persistence.md) | In progress |
 | [Custom pet packs](007-custom-pet-packs.md)                 | Planned     |

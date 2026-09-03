@@ -1,6 +1,6 @@
 # 004: Floating pet overlay
 
-Status: **Planned**
+Status: **In progress**
 
 ## Outcome
 
@@ -10,7 +10,8 @@ A small transparent pet window remains visually present without disrupting norma
 
 - Create a frameless, transparent, always-on-top pet window.
 - Allow dragging and remember the position.
-- Render placeholder animations for core focus states.
+- Render local Shokupan-cat stills and a calm focused-state animation for core
+  focus states.
 - Support click-through behavior when appropriate.
 - Respect reduced motion.
 - Handle display changes, Spaces, full-screen applications, and visible screen bounds.
@@ -37,4 +38,18 @@ A small transparent pet window remains visually present without disrupting norma
 
 ## Implementation notes
 
-Not implemented.
+The asset-driven renderer prototype is implemented. It bundles the approved
+Shokupan-cat runtime frames locally, maps every `SessionPhase` exhaustively to
+an accessible presentation, holds calm states on a neutral frame, and runs the
+focused breathing loop at 600ms per frame. Reduced motion collapses the loop to
+one still frame and does not schedule a timer. The pet remains a button that
+opens settings, while the live session-state bridge is intentionally deferred.
+Automated tests cover every phase mapping and bundled asset path, and the
+Electron startup smoke test verifies that the initial pet image decodes.
+
+Still pending before this feature can be implemented or verified: wiring live
+session state into the renderer, persisting drag position, recovering the pet
+after display changes, manual multi-display/Spaces/full-screen checks on a
+supported Mac, a keyboard-accessible application-menu route to settings, and
+final production sprite cleanup. Intervention and completion art are
+explicitly provisional.
