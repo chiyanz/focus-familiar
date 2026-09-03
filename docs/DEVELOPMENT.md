@@ -55,12 +55,16 @@ This builds, ad-hoc signs, archives, checksums, and launches the packaged Apple
 Silicon app. Outputs are written beneath the ignored `release/` directory:
 
 - `Focus Familiar.app`
-- `focus-familiar-0.1.0-macos-arm64.zip`
-- `focus-familiar-0.1.0-macos-arm64.zip.sha256`
+- `focus-familiar-0.1.0-macos-arm64-local-adhoc.zip`
+- `focus-familiar-0.1.0-macos-arm64-local-adhoc.zip.sha256`
 
 The prototype signature is for local integrity testing, not an Apple Developer
 ID signature or notarization. Release notes must state that distinction until
 the signing pipeline is configured.
+
+`npm run release:macos` is the fail-closed public distribution path. It requires
+a Developer ID identity and notarization credentials stored in Keychain; see
+the [signing and notarization guide](NOTARIZATION.md).
 
 ## Where to start reading
 

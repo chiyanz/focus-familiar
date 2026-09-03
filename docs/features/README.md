@@ -23,6 +23,6 @@ prototype is connected to live session state and window behavior.
 | [Nudge escalation](005-nudge-escalation.md)                 | In progress |
 | [Settings and persistence](006-settings-and-persistence.md) | In progress |
 | [Custom pet packs](007-custom-pet-packs.md)                 | Planned     |
-| [Packaging and release](008-packaging-and-release.md)       | Planned     |
+| [Packaging and release](008-packaging-and-release.md)       | In progress |
 
 When a feature is implemented, update its status, implementation notes, tests, and any deviations from the original design in the same commit or pull request.

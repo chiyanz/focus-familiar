@@ -39,7 +39,9 @@ The initial experience will let someone:
 - [macOS awareness decision](docs/decisions/0003-bundled-macos-workspace-helper.md)
 - [runtime and intervention decision](docs/decisions/0004-deadline-runtime-and-reversible-intervention.md)
 - [local settings decision](docs/decisions/0005-versioned-local-settings.md)
+- [macOS distribution decision](docs/decisions/0006-developer-id-and-notarization.md)
 - [Development workflow](docs/DEVELOPMENT.md)
+- [Signing and notarization](docs/NOTARIZATION.md)
 - [Prototype install guide](docs/INSTALL.md)
 - [Contributor guide](CONTRIBUTING.md)
 

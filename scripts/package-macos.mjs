@@ -17,6 +17,11 @@ import { basename, dirname, join } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
+import { notarize } from "@electron/notarize";
+import { sign } from "@electron/osx-sign";
+
+import { resolveMacOSSigningMode } from "./macos-signing.mjs";
+
 const execFile = promisify(execFileCallback);
 const projectDirectory = dirname(dirname(fileURLToPath(import.meta.url)));
 const releaseDirectory = join(projectDirectory, "release");
@@ -44,10 +49,28 @@ const nativeHelperTarget = join(
   "focus-familiar-activity",
 );
 const defaultAppAsar = join(resourcesDirectory, "default_app.asar");
-const archivePath = join(
-  releaseDirectory,
-  "focus-familiar-0.1.0-macos-arm64.zip",
+const mainEntitlements = join(
+  projectDirectory,
+  "scripts",
+  "entitlements",
+  "main.plist",
 );
+const nativeHelperEntitlements = join(
+  projectDirectory,
+  "scripts",
+  "entitlements",
+  "native-helper.plist",
+);
+const signingMode = resolveMacOSSigningMode({
+  requireNotarization: process.argv.includes("--require-notarization"),
+  identity: process.env.FOCUS_MACOS_SIGN_IDENTITY,
+  keychainProfile: process.env.FOCUS_NOTARY_KEYCHAIN_PROFILE,
+});
+const archiveName =
+  signingMode.mode === "notarized"
+    ? "focus-familiar-0.1.0-macos-arm64.zip"
+    : "focus-familiar-0.1.0-macos-arm64-local-adhoc.zip";
+const archivePath = join(releaseDirectory, archiveName);
 const checksumPath = `${archivePath}.sha256`;
 
 if (process.platform !== "darwin" || process.arch !== "arm64") {
@@ -70,6 +93,12 @@ await assertArm64Binary(
   nativeHelperSource,
   "the compiled macOS activity helper",
 );
+await runCommand("/usr/bin/plutil", ["-lint", mainEntitlements], {
+  stdio: "ignore",
+});
+await runCommand("/usr/bin/plutil", ["-lint", nativeHelperEntitlements], {
+  stdio: "ignore",
+});
 
 await mkdir(releaseDirectory, { recursive: true });
 
@@ -133,24 +162,69 @@ await chmod(nativeHelperTarget, 0o755);
 await patchInfoPlist(join(appBundle, "Contents", "Info.plist"));
 await assertPackageLayout();
 
-// Re-sign the helper before signing the containing app. Ad-hoc signing keeps
-// this prototype runnable locally without asking contributors for an identity.
-console.log("Applying an ad-hoc signature…");
-await runCommand("/usr/bin/codesign", [
-  "--force",
-  "--sign",
-  "-",
-  "--timestamp=none",
-  nativeHelperTarget,
-]);
-await runCommand("/usr/bin/codesign", [
-  "--force",
-  "--deep",
-  "--sign",
-  "-",
-  "--timestamp=none",
-  appBundle,
-]);
+if (signingMode.mode === "notarized") {
+  console.log("Applying a hardened Developer ID signature…");
+  await sign({
+    app: appBundle,
+    identity: signingMode.identity,
+    platform: "darwin",
+    identityValidation: true,
+    preAutoEntitlements: false,
+    preEmbedProvisioningProfile: false,
+    strictVerify: true,
+    optionsForFile: (filePath) => {
+      if (filePath === nativeHelperTarget) {
+        return { entitlements: nativeHelperEntitlements };
+      }
+      if (
+        filePath.includes("(Plugin).app") ||
+        filePath.includes("(GPU).app") ||
+        filePath.includes("(Renderer).app")
+      ) {
+        // These Chromium helpers need @electron/osx-sign's narrowly scoped
+        // built-in runtime entitlements.
+        return null;
+      }
+      return { entitlements: mainEntitlements };
+    },
+  });
+
+  console.log("Submitting to Apple notarization and stapling the ticket…");
+  await notarize({
+    appPath: appBundle,
+    keychainProfile: signingMode.keychainProfile,
+  });
+  await runCommand("/usr/bin/xcrun", ["stapler", "validate", appBundle]);
+  await runCommand("/usr/sbin/spctl", [
+    "--assess",
+    "--type",
+    "execute",
+    "--verbose=4",
+    appBundle,
+  ]);
+} else {
+  // Re-sign the helper before signing the containing app. This path is only
+  // for local prototype testing; downloaded builds will trigger Gatekeeper.
+  console.warn(
+    "Applying an ad-hoc signature. Do not publish this archive as a trusted macOS release.",
+  );
+  await runCommand("/usr/bin/codesign", [
+    "--force",
+    "--sign",
+    "-",
+    "--timestamp=none",
+    nativeHelperTarget,
+  ]);
+  await runCommand("/usr/bin/codesign", [
+    "--force",
+    "--deep",
+    "--sign",
+    "-",
+    "--timestamp=none",
+    appBundle,
+  ]);
+}
+
 await runCommand("/usr/bin/codesign", [
   "--verify",
   "--deep",

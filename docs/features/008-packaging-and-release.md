@@ -38,19 +38,27 @@ Version 0.1 can be built reproducibly and distributed as a trustworthy macOS app
 
 ## Implementation notes
 
-The first Apple Silicon prototype workflow is implemented without adding a
-packaging dependency. It copies the pinned Electron runtime with macOS symlinks
-preserved, installs only the compiled application and native helper, removes
-irrelevant template permission declarations, applies the documented bundle
-metadata, and ad-hoc signs the result. It produces a ZIP and SHA-256 sidecar in
-`release/`.
+The first Apple Silicon prototype workflow copies the pinned Electron runtime
+with macOS symlinks preserved, installs only the compiled application and
+native helper, removes irrelevant template permission declarations, and
+applies the documented bundle metadata. The official Electron signing and
+notarization libraries are development-only dependencies because they handle
+Electron's nested signing order and Apple's `notarytool` workflow.
 
 The packaged smoke test launches the generated application with isolated local
 data and drives the same security, asset, session, persistence, and clean-quit
 checks used by the development build. `npm run prototype` performs the complete
 build, package, checksum, signature verification, and launch check.
 
-This prototype is Apple Silicon-only, ad-hoc signed, and not notarized. A
-Developer ID signature, notarization, final icon, DMG, Intel support decision,
-and manual install/upgrade/uninstall verification remain before this feature
-can be marked Implemented or Verified.
+Local builds remain Apple Silicon-only and ad-hoc signed, with `local-adhoc` in
+their archive name. The public `release:macos` command instead fails closed
+without a Developer ID Application identity and Keychain notarization profile;
+ambient signing settings cannot silently switch a local package into release
+mode. When explicitly configured, the release command enables Hardened Runtime
+and secure timestamps, submits and staples the ticket, and requires Gatekeeper
+assessment to pass before creating the standard archive.
+
+Provisioning the Apple Developer identity, producing the first notarized
+artifact, final icon, DMG, Intel support decision, and manual
+install/upgrade/uninstall verification remain before this feature can be marked
+Implemented or Verified.

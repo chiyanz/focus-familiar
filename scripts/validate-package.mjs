@@ -14,6 +14,9 @@ const requiredScripts = [
   "typecheck",
   "test",
   "verify",
+  "prototype",
+  "release:macos",
+  "test:packaged-smoke",
 ];
 
 const missingScripts = requiredScripts.filter(

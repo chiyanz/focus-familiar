@@ -125,6 +125,9 @@ and privacy decision. See [ADR 0005](decisions/0005-versioned-local-settings.md)
 - Remote content is not rendered in privileged windows.
 - Network access is absent in version 0.1 except when deliberately added for packaging or update checks in a later reviewed milestone.
 - Signing and notarization credentials remain outside the repository.
+- Public macOS packaging fails closed unless Developer ID signing and Apple
+  notarization complete; ad-hoc local artifacts are named separately. See
+  [ADR 0006](decisions/0006-developer-id-and-notarization.md).
 
 ## Test strategy
 
