@@ -20,6 +20,18 @@ A feature is not complete until:
 - The feature plan contains concise implementation notes.
 - User-facing documentation is updated when behavior changes.
 
+## Feedback loops
+
+Use the smallest loop that exercises your change:
+
+- `npm run lab` for the real pet assets and presentation states in a browser.
+- `npm run dev` for the live Electron app with renderer hot reload.
+- `npm run test:watch` for focus rules and typed contracts.
+- `npm run prototype` for the packaged Apple Silicon app and launch smoke test.
+
+See the [development workflow](docs/DEVELOPMENT.md) for the layer map and full
+pre-share checklist.
+
 ## Scope discipline
 
 Version 0.1 intentionally excludes browser extensions, editor extensions, accounts, cloud synchronization, analytics, and generative AI. Please discuss scope expansions before implementing them.

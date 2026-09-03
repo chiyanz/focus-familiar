@@ -39,6 +39,8 @@ The initial experience will let someone:
 - [macOS awareness decision](docs/decisions/0003-bundled-macos-workspace-helper.md)
 - [runtime and intervention decision](docs/decisions/0004-deadline-runtime-and-reversible-intervention.md)
 - [local settings decision](docs/decisions/0005-versioned-local-settings.md)
+- [Development workflow](docs/DEVELOPMENT.md)
+- [Prototype install guide](docs/INSTALL.md)
 - [Contributor guide](CONTRIBUTING.md)
 
 Feature plans are living documents. A feature is only marked **Implemented** after its code and automated checks exist, and **Verified** after its acceptance criteria have been exercised.
@@ -53,9 +55,18 @@ Feature plans are living documents. A feature is only marked **Implemented** aft
 | Live focus prototype   | Implemented |
 | Session persistence    | Implemented |
 | Remaining preferences  | In progress |
+| Prototype package      | In progress |
 | Signed GitHub release  | Planned     |
 
 The development baseline requires macOS 13 or newer and Node.js 22.
+
+## Try the prototype
+
+Download the latest Apple Silicon ZIP and checksum from
+[GitHub Releases](https://github.com/chiyanz/focus-familiar/releases/tag/v0.1.0-prototype.1),
+then follow the [prototype install guide](docs/INSTALL.md). The prototype is
+ad-hoc signed but not yet Developer ID signed or notarized, so macOS will ask
+you to confirm its first launch.
 
 ## Run the development shell
 
@@ -65,6 +76,11 @@ npm run dev
 ```
 
 Run static checks, tests, and a production build with `npm run verify`. On macOS, `npm run test:electron-smoke` also launches the built app, checks its renderer security boundary, and confirms a clean shutdown.
+
+For faster iteration, `npm run lab` opens a browser-only mascot state lab,
+while `npm run dev` runs the real Electron app with renderer hot reload. On an
+Apple Silicon Mac, `npm run prototype` builds and launches the distributable
+prototype. See the [development workflow](docs/DEVELOPMENT.md) for details.
 
 ## License
 

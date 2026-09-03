@@ -13,7 +13,7 @@ The roadmap is ordered to establish secure process boundaries before adding beha
 | 5        | Nudge and intervention ladder           | In progress | [005](features/005-nudge-escalation.md)         |
 | 6        | Settings and local persistence          | In progress | [006](features/006-settings-and-persistence.md) |
 | 7        | Custom pet packs                        | Planned     | [007](features/007-custom-pet-packs.md)         |
-| 8        | Packaging and first release             | Planned     | [008](features/008-packaging-and-release.md)    |
+| 8        | Packaging and first release             | In progress | [008](features/008-packaging-and-release.md)    |
 
 ## Deferred beyond version 0.1
 

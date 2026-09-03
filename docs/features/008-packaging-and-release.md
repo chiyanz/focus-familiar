@@ -1,6 +1,6 @@
 # 008: Packaging and first release
 
-Status: **Planned**
+Status: **In progress**
 
 ## Outcome
 
@@ -38,4 +38,19 @@ Version 0.1 can be built reproducibly and distributed as a trustworthy macOS app
 
 ## Implementation notes
 
-Not implemented.
+The first Apple Silicon prototype workflow is implemented without adding a
+packaging dependency. It copies the pinned Electron runtime with macOS symlinks
+preserved, installs only the compiled application and native helper, removes
+irrelevant template permission declarations, applies the documented bundle
+metadata, and ad-hoc signs the result. It produces a ZIP and SHA-256 sidecar in
+`release/`.
+
+The packaged smoke test launches the generated application with isolated local
+data and drives the same security, asset, session, persistence, and clean-quit
+checks used by the development build. `npm run prototype` performs the complete
+build, package, checksum, signature verification, and launch check.
+
+This prototype is Apple Silicon-only, ad-hoc signed, and not notarized. A
+Developer ID signature, notarization, final icon, DMG, Intel support decision,
+and manual install/upgrade/uninstall verification remain before this feature
+can be marked Implemented or Verified.
