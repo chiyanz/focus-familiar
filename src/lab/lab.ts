@@ -14,9 +14,12 @@ import nudgeStareUrl from "../renderer/assets/shokupan-cat/reactions/reaction-03
 import { SESSION_PHASES, type SessionPhase } from "../core";
 import { startPetAnimation } from "../renderer/pet-animation";
 import {
+  canPlayPetHoverAction,
+  choosePetHoverAction,
   getPetPresentation,
   PET_ASSET_PATHS,
   type PetAssetPath,
+  type PetHoverAction,
 } from "../renderer/pet-presentation";
 
 import "./lab.css";
@@ -78,6 +81,8 @@ const autoDemoInput = requireElement<HTMLInputElement>("#auto-demo");
 
 let currentPhase: SessionPhase = "idle";
 let stopAnimation: (() => void) | undefined;
+let currentHoverAction: PetHoverAction | undefined;
+let previousHoverActionId: PetHoverAction["id"] | undefined;
 let demoTimer: number | undefined;
 let demoIndex = 0;
 
@@ -106,6 +111,8 @@ function renderPhase(phase: SessionPhase): void {
 
   document.documentElement.dataset.reducedMotion = String(reducedMotion);
   stage.dataset.phase = phase;
+  stage.dataset.motion = presentation.mode;
+  delete stage.dataset.action;
   stage.setAttribute("aria-label", `${labels.title} pet presentation`);
   phaseBadge.dataset.phase = phase;
   phaseBadge.textContent = labels.short;
@@ -113,13 +120,12 @@ function renderPhase(phase: SessionPhase): void {
   statusMessage.textContent = presentation.statusText;
   image.alt = `Shokupan cat: ${labels.title.toLocaleLowerCase()}`;
 
-  if (presentation.mode === "loop") {
-    const loopDurationMs = presentation.timeline.reduce(
-      (total, step) => total + (step.durationMs ?? 0),
-      0,
-    );
-    modeSummary.textContent = `${presentation.timeline.length}-step sleep loop · ${(loopDurationMs / 1_000).toFixed(1)}s`;
-  } else if (presentation.reducedMotion && PET_PRESENTATION_HAS_LOOP[phase]) {
+  if (presentation.mode === "ambient") {
+    modeSummary.textContent = "Smooth sleeping breath · 5.8s";
+  } else if (
+    presentation.reducedMotion &&
+    PET_PRESENTATION_HAS_AMBIENT_MOTION[phase]
+  ) {
     modeSummary.textContent = "Still frame · reduced motion";
   } else {
     modeSummary.textContent = "Still frame";
@@ -131,6 +137,7 @@ function renderPhase(phase: SessionPhase): void {
   }
 
   stopPetAnimation();
+  currentHoverAction = undefined;
   stopAnimation = startPetAnimation(
     presentation.timeline,
     (asset) => {
@@ -140,8 +147,40 @@ function renderPhase(phase: SessionPhase): void {
   );
 }
 
-/** Whether a phase has a loop in the full-motion presentation. */
-const PET_PRESENTATION_HAS_LOOP: Readonly<Record<SessionPhase, boolean>> = {
+function playRandomHoverAction(): void {
+  const reducedMotion = reduceMotionInput.checked;
+  if (
+    currentHoverAction ||
+    !canPlayPetHoverAction(currentPhase, reducedMotion)
+  ) {
+    return;
+  }
+
+  const action = choosePetHoverAction(Math.random(), previousHoverActionId);
+  currentHoverAction = action;
+  previousHoverActionId = action.id;
+  stage.dataset.motion = "hover-action";
+  stage.dataset.action = action.id;
+  stopPetAnimation();
+  stopAnimation = startPetAnimation(
+    action.timeline,
+    (asset) => {
+      image.src = petAssetUrls[asset];
+    },
+    window,
+    {
+      loop: false,
+      onComplete: () => {
+        if (currentHoverAction === action) renderPhase(currentPhase);
+      },
+    },
+  );
+}
+
+/** Whether a phase moves in the full-motion presentation. */
+const PET_PRESENTATION_HAS_AMBIENT_MOTION: Readonly<
+  Record<SessionPhase, boolean>
+> = {
   idle: true,
   focused: true,
   grace: false,
@@ -173,6 +212,8 @@ for (const button of phaseButtons) {
     if (phase && isSessionPhase(phase)) selectPhase(phase);
   });
 }
+
+image.addEventListener("mouseenter", playRandomHoverAction);
 
 reduceMotionInput.checked = window.matchMedia(
   "(prefers-reduced-motion: reduce)",

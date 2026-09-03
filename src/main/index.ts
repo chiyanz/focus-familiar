@@ -443,6 +443,32 @@ async function verifySmokeBoundary(): Promise<void> {
   }
 
   if (process.platform === "darwin") {
+    const petWindow = findWindow("pet");
+    if (!petWindow) throw new Error("Pet window is unavailable.");
+    petWindow.showInactive();
+    const petContentBounds = petWindow.getContentBounds();
+    petWindow.webContents.sendInputEvent({
+      type: "mouseMove",
+      x: Math.round(petContentBounds.width / 2),
+      y: Math.round(petContentBounds.height / 3),
+    });
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const hoverResult = await petWindow.webContents.executeJavaScript(`({
+      motion: document.querySelector('.pet-shell')?.dataset.petMotion,
+      action: document.querySelector('.pet-shell')?.dataset.petAction
+    })`);
+    const hoverActionStarted =
+      hoverResult.motion === "hover-action" &&
+      ["ear-twitch", "sleepy-blink"].includes(hoverResult.action);
+    if (
+      (expectsSmokeRecovery && hoverActionStarted) ||
+      (!expectsSmokeRecovery && !hoverActionStarted)
+    ) {
+      throw new Error(
+        `Pet hover-action smoke check failed: ${JSON.stringify(hoverResult)}`,
+      );
+    }
+
     const settingsWindow = findWindow("settings");
     if (!settingsWindow) throw new Error("Settings window is unavailable.");
     const initialPetBounds = findWindow("pet")?.getBounds();
@@ -510,10 +536,10 @@ async function verifySmokeBoundary(): Promise<void> {
     `);
     if (
       !sessionResult.ok ||
-      sessionResult.appInfo.version !== "0.1.0-prototype.3" ||
+      sessionResult.appInfo.version !== "0.1.0-prototype.4" ||
       sessionResult.updateStatus.phase !== "not-checked" ||
-      sessionResult.updateStatus.currentVersion !== "0.1.0-prototype.3" ||
-      !sessionResult.renderedUpdateStatus?.includes("0.1.0-prototype.3") ||
+      sessionResult.updateStatus.currentVersion !== "0.1.0-prototype.4" ||
+      !sessionResult.renderedUpdateStatus?.includes("0.1.0-prototype.4") ||
       !sessionResult.updateCheckEnabled ||
       !sessionResult.updateReleaseHidden ||
       (expectsSmokeRecovery &&

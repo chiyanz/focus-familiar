@@ -13,6 +13,8 @@ A small transparent pet window remains visually present without disrupting norma
   size control.
 - Render local Shokupan-cat stills and a calm focused-state animation for core
   focus states.
+- Play a small random ambient reaction when the user hovers over the cat,
+  without overriding focus nudges.
 - Support click-through behavior when appropriate.
 - Respect reduced motion.
 - Handle display changes, Spaces, full-screen applications, and visible screen bounds.
@@ -32,6 +34,8 @@ A small transparent pet window remains visually present without disrupting norma
 - The full avatar can be dragged without stealing keyboard focus, and size
   changes survive a relaunch.
 - Reduced motion replaces looping movement with a calm still or minimal transition.
+- Hover reactions play only in ready and focused states, and a focus-state
+  change cancels them immediately.
 
 ## Planned tests
 
@@ -44,10 +48,14 @@ A small transparent pet window remains visually present without disrupting norma
 The asset-driven renderer prototype is implemented. It bundles the approved
 Shokupan-cat runtime frames locally, maps every `SessionPhase` exhaustively to
 an accessible presentation, and gives both the ready and focused states a
-low-arousal sleeping loop: two slow breaths, an occasional ear twitch, and a
-settle. The data-driven timeline uses per-frame timing instead of a fixed-rate
-slideshow so future pet packs can replace the cadence cleanly. Reduced motion
-collapses the loop to one still frame and does not schedule a timer. The pet
+low-arousal sleeping breath. The breath uses one stable, bottom-anchored sprite
+with a subtle continuous transform, avoiding jumps between independently
+generated keyframes. Hovering over the cat plays one of two short idle-only
+reactions (an ear twitch or sleepy blink); the picker avoids an immediate
+repeat, and any session phase change cancels the reaction before restoring the
+authoritative presentation. Grace, nudge, intervention, and terminal art are
+never used as hover actions. Reduced motion holds one still frame and suppresses
+hover animation. The pet
 avatar is the native drag surface; a separate status pill opens settings so
 dragging does not compete with a click action. Its square window scales from
 160 to 480 logical pixels through a settings slider. Size and display-aware
@@ -61,12 +69,15 @@ the Electron startup smoke test verifies that the pet follows a live session
 through stop.
 
 The Shokupan source poses and bundled runtime frames also have a reproducible
-one-pixel cocoa contour outside their silhouettes. It removes pale edge fringe
-on dark desktops without flattening the PNG transparency. The visual lab
-includes a dark-canvas toggle, and the macOS CI job validates every source and
-runtime PNG with the same idempotent edge tool.
+cocoa contour outside their silhouettes. It removes pale edge fringe on dark
+desktops without flattening the PNG transparency. Idle frames are translated
+to a shared center and baseline without rescaling. The visual lab includes a
+dark-canvas toggle and exercises the same hover actions as the app, while the
+macOS CI job validates every source and runtime PNG with idempotent edge and
+alignment tools.
 
-Automated coverage includes drag-region separation, bounded geometry,
+Automated coverage includes ambient and one-shot animation playback, injected
+random hover selection, reduced-motion and phase guards, drag-region separation, bounded geometry,
 off-screen recovery, settings validation, serialized position/size writes, and
 the Electron resize path. Still pending before this feature can be verified:
 manual multi-display, Spaces, and full-screen checks on a supported Mac, plus

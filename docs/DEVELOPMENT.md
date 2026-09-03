@@ -19,7 +19,8 @@ extension is needed.
 
 Opens a browser-only visual lab with the real mascot assets and presentation
 rules. Use it to switch among focus phases and inspect motion without launching
-Electron or the macOS helper. Vite updates the page as files change.
+Electron or the macOS helper. Hover over the cat to preview the same random
+ambient reactions as the app. Vite updates the page as files change.
 
 ### Live application: `npm run dev`
 
