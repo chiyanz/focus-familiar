@@ -36,6 +36,39 @@ A small transparent pet window remains visually present without disrupting norma
 - Reduced motion replaces looping movement with a calm still or minimal transition.
 - Hover reactions play only in ready and focused states, and a focus-state
   change cancels them immediately.
+- Ready and focused use the four-frame sleeping-breath loop; away phases must
+  never fall back to an idle-loop frame.
+- Grace, nudge, and intervention each use a distinct full-body reaction pose.
+- Every runtime pose shares the same center and floor anchor so state changes
+  read as pose changes rather than window jumps.
+
+## Presentation behavior contract
+
+This table is the source of truth for the default Shokupan pet pack. Changes to
+it require matching presentation tests and a visual-lab spot check.
+
+| Trigger or phase                                | Required visual                                                        | Motion and text behavior                                                                                                                                      |
+| ----------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ready (`idle`)                                  | `loop-01` → `loop-02` → `loop-03` → `loop-04`                          | Loop the four bottom-anchored sleeping-breath frames. Text stays collapsed until hover.                                                                       |
+| In target app (`focused`)                       | Same four-frame sleeping-breath loop                                   | Continue calm looping; returning from an away phase restarts the loop.                                                                                        |
+| Left target, before grace threshold (`grace`)   | `reaction-01-grace-glance`                                             | Hold the one-eye-open loaf. Do not play a hover action.                                                                                                       |
+| Grace threshold reached (`nudge`)               | `reaction-05-paw-tap`                                                  | Hold the reaching-paw pose and reveal “Let’s head back” briefly.                                                                                              |
+| Intervention threshold reached (`intervention`) | `reaction-06-polite-wait`                                              | Hold the upright waiting pose. Increase the wrapper scale and briefly reveal rotating return copy every 15 seconds; never take focus or activate another app. |
+| Paused (`paused`)                               | `loop-01-neutral`                                                      | Hold neutral with no ambient or hover animation.                                                                                                              |
+| Completed (`completed`)                         | `idle-05-forward-stretch`                                              | Hold the stretch as a quiet completion pose.                                                                                                                  |
+| Stopped (`stopped`)                             | `loop-01-neutral`                                                      | Hold neutral with no ambient or hover animation.                                                                                                              |
+| Pointer enters during ready/focused             | Random `idle-05-forward-stretch` or `idle-06-paw-groom`                | Play one obvious one-shot pose, avoid an immediate repeat, then resume the authoritative breathing loop.                                                      |
+| Reduced motion enabled                          | Neutral still for ready/focused; phase-specific still for other phases | Do not loop, wiggle, pop, or play hover actions.                                                                                                              |
+
+Presentation priority is deterministic: a focus-phase change cancels any hover
+action immediately, then displays the phase pose. Hover can never replace
+grace, nudge, intervention, pause, completion, or stop feedback.
+
+All default runtime PNGs use a transparent 384×512 canvas. The visible
+silhouette must be centered at x=192 ± 1 pixel, rest on y=460 ± 1 pixel, and
+remain within a 240–360 pixel width and 240–410 pixel height envelope. The
+alignment command checks these invariants and rejects cropped close-ups such
+as the retired half-lens stare.
 
 ## Planned tests
 
@@ -48,10 +81,9 @@ A small transparent pet window remains visually present without disrupting norma
 The asset-driven renderer prototype is implemented. It bundles the approved
 Shokupan-cat runtime frames locally, maps every `SessionPhase` exhaustively to
 an accessible presentation, and gives both the ready and focused states a
-low-arousal sleeping breath. The breath and all session phases use one stable,
-bottom-anchored loaf sprite; escalation changes styling and copy without
-swapping to generated poses with different visible bounds. Hovering over the
-cat plays one of two short idle-only reactions (an ear twitch or sleepy blink);
+four-frame, low-arousal sleeping breath. Grace, nudge, and intervention use
+distinct one-eye glance, paw-tap, and upright-wait poses. Hovering over the
+cat plays one of two unmistakable idle-only poses (a forward stretch or paw groom);
 the picker avoids an immediate repeat, and any session phase change cancels the
 reaction before restoring the authoritative presentation. Reduced motion holds
 one still frame and suppresses hover animation.
@@ -76,18 +108,20 @@ The Shokupan source poses and bundled runtime frames also have a reproducible
 cocoa edge band. Four exterior pixels protect fractional scaling, while three
 inset pixels replace the opaque pale antialias dashes present in the generated
 source art. This removes the visible white halo on dark desktops without
-flattening PNG transparency. Idle frames are translated to a shared center and
-baseline without rescaling. The visual lab includes a dark-canvas toggle and
-exercises the same hover actions as the app, while the macOS CI job validates
-every source and runtime PNG with idempotent edge and alignment tools.
+flattening PNG transparency. Idle, reaction, completion, and hover frames are
+translated to a shared center and baseline without rescaling. The visual lab
+includes a dark-canvas toggle and exercises the same phase mappings and hover
+actions as the app, while the macOS CI job validates every source and runtime
+PNG with idempotent edge and alignment tools.
 
-Automated coverage includes ambient and one-shot animation playback, injected
-random hover selection, reduced-motion and phase guards, the validated manual-drag boundary, bounded geometry,
+Automated coverage includes the exact state-to-sprite table, all four ambient
+frames, obvious one-shot hover assets, injected random hover selection,
+reduced-motion and phase guards, the validated manual-drag boundary, bounded geometry,
 off-screen recovery, settings validation, serialized position/size writes, and
-the Electron resize path. Still pending before this feature can be verified:
+the Electron resize path. The Electron smoke test also walks a deliberately
+away session through grace, nudge, and intervention and checks the logical
+runtime asset displayed at each phase. Still pending before this feature can be verified:
 manual multi-display, Spaces, and full-screen checks on a supported Mac, plus
 final production sprite cleanup. The normal settings window provides keyboard-accessible pause,
 stop, and quit paths once opened from the pet; a native application-menu route
-remains pending. Intervention and
-completion art can be reintroduced after future poses share the runtime loaf's
-visible bounds.
+remains pending.

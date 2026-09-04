@@ -516,11 +516,13 @@ async function verifySmokeBoundary(): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 500));
     const hoverResult = await petWindow.webContents.executeJavaScript(`({
       motion: document.querySelector('.pet-shell')?.dataset.petMotion,
-      action: document.querySelector('.pet-shell')?.dataset.petAction
+      action: document.querySelector('.pet-shell')?.dataset.petAction,
+      asset: document.querySelector('.pet-shell')?.dataset.petAsset
     })`);
     const hoverActionStarted =
       hoverResult.motion === "hover-action" &&
-      ["ear-twitch", "sleepy-blink"].includes(hoverResult.action);
+      ["big-stretch", "paw-groom"].includes(hoverResult.action) &&
+      hoverResult.asset?.includes("/idle-actions/");
     if (
       (expectsSmokeRecovery && hoverActionStarted) ||
       (!expectsSmokeRecovery && !hoverActionStarted)
@@ -637,10 +639,10 @@ async function verifySmokeBoundary(): Promise<void> {
     `);
     if (
       !sessionResult.ok ||
-      sessionResult.appInfo.version !== "0.1.0-prototype.6" ||
+      sessionResult.appInfo.version !== "0.1.0-prototype.7" ||
       sessionResult.updateStatus.phase !== "not-checked" ||
-      sessionResult.updateStatus.currentVersion !== "0.1.0-prototype.6" ||
-      !sessionResult.renderedUpdateStatus?.includes("0.1.0-prototype.6") ||
+      sessionResult.updateStatus.currentVersion !== "0.1.0-prototype.7" ||
+      !sessionResult.renderedUpdateStatus?.includes("0.1.0-prototype.7") ||
       !sessionResult.updateCheckEnabled ||
       !sessionResult.updateReleaseHidden ||
       (expectsSmokeRecovery &&
@@ -680,6 +682,78 @@ async function verifySmokeBoundary(): Promise<void> {
         `Pet resize smoke check failed: ${JSON.stringify(petBounds)}`,
       );
     }
+
+    // Start an intentionally unmatched target and spot-check the complete
+    // away ladder in the real Electron renderer. The logical asset path is a
+    // renderer diagnostic only; it contains no activity data.
+    const readPetPresentation = async (): Promise<{
+      readonly phase?: string;
+      readonly asset?: string;
+    }> =>
+      petWindow.webContents.executeJavaScript(`({
+        phase: document.querySelector('.pet-shell')?.dataset.petPhase,
+        asset: document.querySelector('.pet-shell')?.dataset.petAsset
+      })`);
+    const waitForPetPhase = async (phase: string) => {
+      for (let attempt = 0; attempt < 50; attempt += 1) {
+        const presentation = await readPetPresentation();
+        if (presentation.phase === phase) return presentation;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      throw new Error(`Timed out waiting for pet phase: ${phase}`);
+    };
+    await settingsWindow.webContents.executeJavaScript(`
+      window.focusFamiliar.startSession({
+        task: "Verify away sprite ladder",
+        targetApplication: {
+          bundleId: "com.focus-familiar.smoke.never-foreground",
+          name: "Smoke Target"
+        },
+        durationMs: 60000,
+        gracePeriodMs: 200,
+        interventionAfterMs: 800,
+        intensity: "balanced"
+      })
+    `);
+    const awayPresentations = [
+      await waitForPetPhase("grace"),
+      await waitForPetPhase("nudge"),
+      await waitForPetPhase("intervention"),
+    ];
+    const expectedAwayPresentations = [
+      {
+        phase: "grace",
+        asset: "./assets/shokupan-cat/reactions/reaction-01-grace-glance.png",
+      },
+      {
+        phase: "nudge",
+        asset: "./assets/shokupan-cat/reactions/reaction-05-paw-tap.png",
+      },
+      {
+        phase: "intervention",
+        asset: "./assets/shokupan-cat/reactions/reaction-06-polite-wait.png",
+      },
+    ];
+    if (
+      JSON.stringify(awayPresentations) !==
+      JSON.stringify(expectedAwayPresentations)
+    ) {
+      throw new Error(
+        `Pet away-presentation smoke check failed: ${JSON.stringify(awayPresentations)}`,
+      );
+    }
+    await settingsWindow.webContents.executeJavaScript(
+      'window.focusFamiliar.requestSessionAction("stop")',
+    );
+    await settingsWindow.webContents.executeJavaScript(`
+      (() => {
+        const taskInput = document.querySelector("#task");
+        if (!(taskInput instanceof HTMLInputElement)) return false;
+        taskInput.value = "Flushed during quit";
+        taskInput.dispatchEvent(new Event("input", { bubbles: true }));
+        return true;
+      })()
+    `);
   }
 }
 

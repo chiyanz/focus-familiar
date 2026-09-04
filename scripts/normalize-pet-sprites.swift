@@ -5,15 +5,20 @@ import Foundation
 import ImageIO
 import UniformTypeIdentifiers
 
-// The idle-loop PNGs share a 384x512 canvas. The anchor is expressed in
+// Runtime pet PNGs share a 384x512 canvas. The anchor is expressed in
 // top-left image coordinates so it remains easy to compare with an editor or
-// an exported contact sheet: the silhouette should be centered at x=192 and
-// rest on y=460. Only integer translation is applied; the generated artwork
-// is not rescaled or otherwise filtered.
+// an exported contact sheet: every silhouette should be centered at x=192 and
+// rest on y=460. Broad footprint limits reject cropped close-ups and tiny art
+// that would create an apparent size jump. Only integer translation is
+// applied; the generated artwork is not rescaled or otherwise filtered.
 private let targetCenterX = 192.0
 private let targetBaselineY = 460
 private let centerTolerance = 1.0
 private let baselineTolerance = 1
+private let minimumVisibleWidth = 240
+private let maximumVisibleWidth = 360
+private let minimumVisibleHeight = 240
+private let maximumVisibleHeight = 410
 
 private struct Bounds {
   let minX: Int
@@ -27,6 +32,14 @@ private struct Bounds {
 
   var baselineY: Int {
     maxY
+  }
+
+  var width: Int {
+    maxX - minX + 1
+  }
+
+  var height: Int {
+    maxY - minY + 1
   }
 }
 
@@ -52,7 +65,7 @@ private enum SpriteError: LocalizedError {
   var errorDescription: String? {
     switch self {
     case .invalidArguments:
-      return "Usage: swift scripts/normalize-idle-loop.swift [--in-place | --check] PNG [PNG ...]"
+      return "Usage: swift scripts/normalize-pet-sprites.swift [--in-place | --check] PNG [PNG ...]"
     case let .unreadableImage(path):
       return "Could not decode PNG: \(path)"
     case let .contextCreationFailed(path):
@@ -60,13 +73,13 @@ private enum SpriteError: LocalizedError {
     case let .encodingFailed(path):
       return "Could not encode normalized PNG: \(path)"
     case let .invalidCanvas(path, width, height):
-      return "Idle-loop sprite must use a 384x512 canvas: \(path) is \(width)x\(height)"
+      return "Pet sprite must use a 384x512 canvas: \(path) is \(width)x\(height)"
     case let .emptySprite(path):
-      return "Idle-loop sprite has no visible pixels: \(path)"
+      return "Pet sprite has no visible pixels: \(path)"
     case let .outOfBounds(path, dx, dy):
       return "Normalizing \(path) would move artwork outside the canvas (dx=\(dx), dy=\(dy))"
     case let .validationFailed(path, reason):
-      return "Idle-loop alignment validation failed for \(path): \(reason)"
+      return "Pet sprite alignment validation failed for \(path): \(reason)"
     }
   }
 }
@@ -110,9 +123,23 @@ do {
           "silhouette baseline y=\(sprite.bounds.baselineY); expected \(targetBaselineY) ± \(baselineTolerance)"
         )
       }
+      guard
+        sprite.bounds.width >= minimumVisibleWidth,
+        sprite.bounds.width <= maximumVisibleWidth,
+        sprite.bounds.height >= minimumVisibleHeight,
+        sprite.bounds.height <= maximumVisibleHeight
+      else {
+        throw SpriteError.validationFailed(
+          inputPath,
+          "visible footprint \(sprite.bounds.width)x\(sprite.bounds.height) is outside "
+            + "\(minimumVisibleWidth)...\(maximumVisibleWidth) x "
+            + "\(minimumVisibleHeight)...\(maximumVisibleHeight)"
+        )
+      }
       print(
         "Verified \(sprite.url.lastPathComponent): "
-          + "center x=\(format(sprite.bounds.centerX)), baseline y=\(sprite.bounds.baselineY)"
+          + "center x=\(format(sprite.bounds.centerX)), baseline y=\(sprite.bounds.baselineY), "
+          + "footprint=\(sprite.bounds.width)x\(sprite.bounds.height)"
       )
       continue
     }

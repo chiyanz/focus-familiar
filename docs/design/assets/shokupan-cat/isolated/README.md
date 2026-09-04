@@ -31,20 +31,22 @@ find docs/design/assets/shokupan-cat/isolated src/renderer/assets/shokupan-cat \
 npm run test:sprite-edges
 ```
 
-The breathing-loop layout pass is also reproducible and only translates pixels
-on the existing canvas; it does not rescale or filter the artwork. Run the
-contour cleanup before alignment so the baseline includes the final silhouette:
+The runtime layout pass is also reproducible and only translates pixels on the
+existing canvas; it does not rescale or filter the artwork. Run the contour
+cleanup before alignment so the baseline includes the final silhouette:
 
 ```bash
-swift scripts/normalize-idle-loop.swift --in-place \
+swift scripts/normalize-pet-sprites.swift --in-place \
   docs/design/assets/shokupan-cat/isolated/idle-loop/*.png \
   src/renderer/assets/shokupan-cat/idle-loop/*.png
 npm run test:sprite-alignment
 ```
 
 The validators check the shared 384x512 canvas, center (x=192 +/- 1 px),
-baseline (y=460 +/- 1 px), fully transparent RGB channels, the exterior cocoa
-contour, and the inset cocoa edge band. These remain generated concept art, not
+baseline (y=460 +/- 1 px), a bounded visible footprint, fully transparent RGB
+channels, the exterior cocoa contour, and the inset cocoa edge band. The
+package alignment check includes every runtime state and hover pose. These
+remain generated concept art, not
 pixel-clean production sprites; palette cleanup and animation review may still
 refine the final look. The consolidated source sheets and rejected design
 directions were intentionally removed after isolation. They remain recoverable

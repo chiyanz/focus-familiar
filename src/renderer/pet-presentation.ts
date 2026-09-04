@@ -11,16 +11,13 @@ export const PET_ASSET_PATHS = {
   idleInhaleStart: "./assets/shokupan-cat/idle-loop/loop-02-inhale-start.png",
   idleInhalePeak: "./assets/shokupan-cat/idle-loop/loop-03-inhale-peak.png",
   idleExhaleStart: "./assets/shokupan-cat/idle-loop/loop-04-exhale-start.png",
-  idleEarTurn: "./assets/shokupan-cat/idle-loop/loop-05-ear-turn.png",
-  idleEarTwitch: "./assets/shokupan-cat/idle-loop/loop-06-ear-twitch.png",
-  idleSettle: "./assets/shokupan-cat/idle-loop/loop-07-settle.png",
-  idleClose: "./assets/shokupan-cat/idle-loop/loop-08-close.png",
   graceGlance: "./assets/shokupan-cat/reactions/reaction-01-grace-glance.png",
-  nudgeStare: "./assets/shokupan-cat/reactions/reaction-03-half-lens-stare.png",
+  nudgePawTap: "./assets/shokupan-cat/reactions/reaction-05-paw-tap.png",
   interventionWait:
     "./assets/shokupan-cat/reactions/reaction-06-polite-wait.png",
   forwardStretch:
     "./assets/shokupan-cat/idle-actions/idle-05-forward-stretch.png",
+  pawGroom: "./assets/shokupan-cat/idle-actions/idle-06-paw-groom.png",
 } as const;
 
 export type PetAssetPath =
@@ -49,42 +46,41 @@ export interface PetPresentation extends PetPresentationDefinition {
 }
 
 export interface PetHoverAction {
-  readonly id: "ear-twitch" | "sleepy-blink";
+  readonly id: "big-stretch" | "paw-groom";
   readonly timeline: NonEmptyReadonlyArray<PetAnimationStep>;
 }
 
 /**
- * Ambient breathing uses one stable sprite plus a continuous CSS transform.
- * Keeping the baseline fixed avoids visible jumps between independently
- * generated keyframes while still giving the loaf a quiet breathing rhythm.
+ * Four bottom-anchored frames make the sleeping loaf breathe. These are the
+ * deliberately calm half of the original eight-frame set; the larger ear
+ * motion is reserved for future polish instead of making the loop twitchy.
  */
 export const SLEEPING_BREATH_TIMELINE = [
-  { asset: PET_ASSET_PATHS.idleNeutral, durationMs: null },
+  { asset: PET_ASSET_PATHS.idleNeutral, durationMs: 1_100 },
+  { asset: PET_ASSET_PATHS.idleInhaleStart, durationMs: 800 },
+  { asset: PET_ASSET_PATHS.idleInhalePeak, durationMs: 700 },
+  { asset: PET_ASSET_PATHS.idleExhaleStart, durationMs: 900 },
 ] as const satisfies NonEmptyReadonlyArray<PetAnimationStep>;
 
 /**
- * Short, one-shot ambient reactions. They intentionally reuse only idle art;
- * focus-policy reactions remain reserved for grace and nudge states.
+ * Short, one-shot ambient reactions use unmistakably different body poses.
+ * Focus-policy reactions remain reserved for grace and away states.
  */
 export const PET_HOVER_ACTIONS = [
   {
-    id: "ear-twitch",
+    id: "big-stretch",
     timeline: [
       { asset: PET_ASSET_PATHS.idleNeutral, durationMs: 120 },
-      { asset: PET_ASSET_PATHS.idleEarTurn, durationMs: 180 },
-      { asset: PET_ASSET_PATHS.idleEarTwitch, durationMs: 240 },
-      { asset: PET_ASSET_PATHS.idleEarTurn, durationMs: 180 },
-      { asset: PET_ASSET_PATHS.idleNeutral, durationMs: 280 },
+      { asset: PET_ASSET_PATHS.forwardStretch, durationMs: 900 },
+      { asset: PET_ASSET_PATHS.idleNeutral, durationMs: 240 },
     ],
   },
   {
-    id: "sleepy-blink",
+    id: "paw-groom",
     timeline: [
       { asset: PET_ASSET_PATHS.idleNeutral, durationMs: 120 },
-      { asset: PET_ASSET_PATHS.idleSettle, durationMs: 180 },
-      { asset: PET_ASSET_PATHS.idleClose, durationMs: 520 },
-      { asset: PET_ASSET_PATHS.idleSettle, durationMs: 180 },
-      { asset: PET_ASSET_PATHS.idleNeutral, durationMs: 280 },
+      { asset: PET_ASSET_PATHS.pawGroom, durationMs: 900 },
+      { asset: PET_ASSET_PATHS.idleNeutral, durationMs: 240 },
     ],
   },
 ] as const satisfies readonly PetHoverAction[];
@@ -130,19 +126,19 @@ export const PET_PRESENTATIONS = {
     statusText: "Focused with you",
   },
   grace: {
-    timeline: [{ asset: PET_ASSET_PATHS.idleNeutral, durationMs: null }],
+    timeline: [{ asset: PET_ASSET_PATHS.graceGlance, durationMs: null }],
     mode: "still",
     provisional: false,
     statusText: "Come back when ready",
   },
   nudge: {
-    timeline: [{ asset: PET_ASSET_PATHS.idleNeutral, durationMs: null }],
+    timeline: [{ asset: PET_ASSET_PATHS.nudgePawTap, durationMs: null }],
     mode: "still",
     provisional: false,
     statusText: "Let’s head back",
   },
   intervention: {
-    timeline: [{ asset: PET_ASSET_PATHS.idleNeutral, durationMs: null }],
+    timeline: [{ asset: PET_ASSET_PATHS.interventionWait, durationMs: null }],
     mode: "still",
     provisional: false,
     statusText: "Time to return",
@@ -154,7 +150,7 @@ export const PET_PRESENTATIONS = {
     statusText: "Focus session paused",
   },
   completed: {
-    timeline: [{ asset: PET_ASSET_PATHS.idleNeutral, durationMs: null }],
+    timeline: [{ asset: PET_ASSET_PATHS.forwardStretch, durationMs: null }],
     mode: "still",
     provisional: false,
     statusText: "Focus session complete",
@@ -226,10 +222,15 @@ export function getPetPresentation(
 ): PetPresentation {
   const definition = PET_PRESENTATIONS[phase];
   const shouldAnimate = !reducedMotion && definition.mode === "ambient";
+  const timeline = shouldAnimate
+    ? definition.timeline
+    : definition.mode === "ambient"
+      ? ([{ asset: PET_ASSET_PATHS.idleNeutral, durationMs: null }] as const)
+      : definition.timeline;
 
   return {
     phase,
-    timeline: definition.timeline,
+    timeline,
     mode: shouldAnimate ? "ambient" : "still",
     provisional: definition.provisional,
     statusText: definition.statusText,

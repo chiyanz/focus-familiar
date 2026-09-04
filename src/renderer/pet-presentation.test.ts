@@ -48,7 +48,7 @@ describe("pet presentation", () => {
     }
   });
 
-  it("animates idle and focused states from one stable sleeping frame", () => {
+  it("animates idle and focused states with the complete breathing loop", () => {
     for (const phase of ["idle", "focused"] as const) {
       expect(getPetPresentation(phase)).toMatchObject({
         timeline: SLEEPING_BREATH_TIMELINE,
@@ -58,13 +58,32 @@ describe("pet presentation", () => {
     }
   });
 
-  it("holds one baseline-stable loaf through phase changes", () => {
-    for (const phase of SESSION_PHASES) {
-      expect(getPetPresentation(phase)).toMatchObject({
-        timeline: [{ asset: PET_ASSET_PATHS.idleNeutral, durationMs: null }],
+  it("maps every away phase to its own non-idle reaction pose", () => {
+    const awayContract = {
+      grace: PET_ASSET_PATHS.graceGlance,
+      nudge: PET_ASSET_PATHS.nudgePawTap,
+      intervention: PET_ASSET_PATHS.interventionWait,
+    } as const;
+    const awayAssets = Object.values(awayContract);
+
+    expect(new Set(awayAssets).size).toBe(awayAssets.length);
+    for (const [phase, asset] of Object.entries(awayContract)) {
+      expect(getPetPresentation(phase as SessionPhase)).toMatchObject({
+        timeline: [{ asset, durationMs: null }],
+        mode: "still",
         provisional: false,
       });
+      expect(asset).toContain("/reactions/");
+      expect(asset).not.toContain("/idle-loop/");
+      expect(asset).not.toBe(PET_ASSET_PATHS.idleNeutral);
     }
+  });
+
+  it("celebrates completion with a distinct stretch pose", () => {
+    expect(getPetPresentation("completed")).toMatchObject({
+      timeline: [{ asset: PET_ASSET_PATHS.forwardStretch, durationMs: null }],
+      mode: "still",
+    });
   });
 
   it("collapses idle and focused loops to one frame for reduced motion", () => {
@@ -88,18 +107,29 @@ describe("pet presentation", () => {
     }
   });
 
-  it("keeps ambient breathing on one baseline-stable sprite", () => {
+  it("keeps ambient breathing on four ordered, timed frames", () => {
     expect(SLEEPING_BREATH_TIMELINE).toEqual([
-      { asset: PET_ASSET_PATHS.idleNeutral, durationMs: null },
+      { asset: PET_ASSET_PATHS.idleNeutral, durationMs: 1_100 },
+      { asset: PET_ASSET_PATHS.idleInhaleStart, durationMs: 800 },
+      { asset: PET_ASSET_PATHS.idleInhalePeak, durationMs: 700 },
+      { asset: PET_ASSET_PATHS.idleExhaleStart, durationMs: 900 },
     ]);
+    expect(
+      new Set(SLEEPING_BREATH_TIMELINE.map(({ asset }) => asset)).size,
+    ).toBe(4);
+    expect(
+      SLEEPING_BREATH_TIMELINE.every(
+        ({ durationMs }) => durationMs !== null && durationMs > 0,
+      ),
+    ).toBe(true);
   });
 
   it("selects non-repeating hover actions with an injected random value", () => {
-    expect(choosePetHoverAction(0).id).toBe("ear-twitch");
-    expect(choosePetHoverAction(0.999).id).toBe("sleepy-blink");
-    expect(choosePetHoverAction(0, "ear-twitch").id).toBe("sleepy-blink");
-    expect(choosePetHoverAction(Number.NaN, "sleepy-blink").id).toBe(
-      "ear-twitch",
+    expect(choosePetHoverAction(0).id).toBe("big-stretch");
+    expect(choosePetHoverAction(0.999).id).toBe("paw-groom");
+    expect(choosePetHoverAction(0, "big-stretch").id).toBe("paw-groom");
+    expect(choosePetHoverAction(Number.NaN, "paw-groom").id).toBe(
+      "big-stretch",
     );
   });
 
@@ -112,16 +142,26 @@ describe("pet presentation", () => {
     }
   });
 
-  it("keeps distraction reaction art out of hover actions", () => {
+  it("uses obvious idle-only body poses for hover actions", () => {
     const reactionAssets = new Set<string>([
       PET_ASSET_PATHS.graceGlance,
-      PET_ASSET_PATHS.nudgeStare,
+      PET_ASSET_PATHS.nudgePawTap,
       PET_ASSET_PATHS.interventionWait,
     ]);
+    const ambientAssets = new Set<string>(
+      SLEEPING_BREATH_TIMELINE.map(({ asset }) => asset),
+    );
 
     expect(PET_HOVER_ACTIONS).toHaveLength(2);
     for (const action of PET_HOVER_ACTIONS) {
+      expect(action.timeline[0].asset).toBe(PET_ASSET_PATHS.idleNeutral);
       expect(action.timeline.at(-1)?.asset).toBe(PET_ASSET_PATHS.idleNeutral);
+      expect(
+        action.timeline.some(
+          ({ asset }) =>
+            asset.includes("/idle-actions/") && !ambientAssets.has(asset),
+        ),
+      ).toBe(true);
       for (const step of action.timeline) {
         expect(reactionAssets.has(step.asset)).toBe(false);
       }

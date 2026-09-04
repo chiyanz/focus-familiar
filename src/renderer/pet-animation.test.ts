@@ -98,7 +98,7 @@ describe("pet animation player", () => {
     startPetAnimation(
       [
         { asset: PET_ASSET_PATHS.idleNeutral, durationMs: 120 },
-        { asset: PET_ASSET_PATHS.idleEarTurn, durationMs: 180 },
+        { asset: PET_ASSET_PATHS.forwardStretch, durationMs: 180 },
       ],
       (asset) => rendered.push(asset),
       clock,
@@ -110,7 +110,7 @@ describe("pet animation player", () => {
 
     expect(rendered).toEqual([
       PET_ASSET_PATHS.idleNeutral,
-      PET_ASSET_PATHS.idleEarTurn,
+      PET_ASSET_PATHS.forwardStretch,
     ]);
     expect(onComplete).toHaveBeenCalledOnce();
     expect(pending.size).toBe(0);
@@ -122,7 +122,7 @@ describe("pet animation player", () => {
     const stop = startPetAnimation(
       [
         { asset: PET_ASSET_PATHS.idleNeutral, durationMs: 120 },
-        { asset: PET_ASSET_PATHS.idleEarTurn, durationMs: 180 },
+        { asset: PET_ASSET_PATHS.forwardStretch, durationMs: 180 },
       ],
       vi.fn(),
       clock,
