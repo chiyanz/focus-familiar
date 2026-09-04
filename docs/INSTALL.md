@@ -10,7 +10,7 @@ GitHub release. With both files in Downloads, open Terminal and run:
 
 ```bash
 cd ~/Downloads
-shasum -a 256 -c focus-familiar-0.1.0-prototype.8-macos-arm64-local-adhoc.zip.sha256
+shasum -a 256 -c focus-familiar-0.1.0-prototype.9-macos-arm64-local-adhoc.zip.sha256
 ```
 
 The result should say `OK`. This confirms that the download matches the file

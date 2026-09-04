@@ -480,6 +480,12 @@ async function verifySmokeBoundary(): Promise<void> {
           avatar: getComputedStyle(avatar).getPropertyValue('-webkit-app-region'),
           settings: getComputedStyle(settingsButton).getPropertyValue('-webkit-app-region')
         };
+      })(),
+      petHintGap: (() => {
+        const settingsButton = document.querySelector('#open-settings');
+        return settingsButton instanceof HTMLElement
+          ? getComputedStyle(settingsButton).columnGap
+          : '';
       })()
     })`);
 
@@ -495,7 +501,8 @@ async function verifySmokeBoundary(): Promise<void> {
         !result.petImage.complete ||
         result.petImage.naturalWidth <= 0 ||
         result.petDragContract.avatar !== "no-drag" ||
-        result.petDragContract.settings !== "no-drag")
+        result.petDragContract.settings !== "no-drag" ||
+        result.petHintGap !== "0px")
     ) {
       throw new Error(
         `Pet renderer smoke check failed: ${JSON.stringify(result)}`,
@@ -639,10 +646,10 @@ async function verifySmokeBoundary(): Promise<void> {
     `);
     if (
       !sessionResult.ok ||
-      sessionResult.appInfo.version !== "0.1.0-prototype.8" ||
+      sessionResult.appInfo.version !== "0.1.0-prototype.9" ||
       sessionResult.updateStatus.phase !== "not-checked" ||
-      sessionResult.updateStatus.currentVersion !== "0.1.0-prototype.8" ||
-      !sessionResult.renderedUpdateStatus?.includes("0.1.0-prototype.8") ||
+      sessionResult.updateStatus.currentVersion !== "0.1.0-prototype.9" ||
+      !sessionResult.renderedUpdateStatus?.includes("0.1.0-prototype.9") ||
       !sessionResult.updateCheckEnabled ||
       !sessionResult.updateReleaseHidden ||
       (expectsSmokeRecovery &&
@@ -740,6 +747,35 @@ async function verifySmokeBoundary(): Promise<void> {
     ) {
       throw new Error(
         `Pet away-presentation smoke check failed: ${JSON.stringify(awayPresentations)}`,
+      );
+    }
+    let sideEyePresentation:
+      | {
+          readonly phase?: string;
+          readonly stage?: string;
+          readonly asset?: string;
+          readonly hintVisible?: string;
+        }
+      | undefined;
+    for (let attempt = 0; attempt < 180; attempt += 1) {
+      sideEyePresentation = await petWindow.webContents.executeJavaScript(`({
+          phase: document.querySelector('.pet-shell')?.dataset.petPhase,
+          stage: document.querySelector('.pet-shell')?.dataset.petStage,
+          asset: document.querySelector('.pet-shell')?.dataset.petAsset,
+          hintVisible: document.querySelector('.pet-shell')?.dataset.hintVisible
+        })`);
+      if (sideEyePresentation?.stage === "persistent-side-eye") break;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    if (
+      sideEyePresentation?.phase !== "intervention" ||
+      sideEyePresentation.stage !== "persistent-side-eye" ||
+      sideEyePresentation.asset !==
+        "./assets/shokupan-cat/reactions/reaction-04-side-eye.png" ||
+      sideEyePresentation.hintVisible !== "true"
+    ) {
+      throw new Error(
+        `Pet side-eye transition smoke check failed: ${JSON.stringify(sideEyePresentation)}`,
       );
     }
     await settingsWindow.webContents.executeJavaScript(

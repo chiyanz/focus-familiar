@@ -5,7 +5,7 @@ import idleInhalePeakUrl from "./assets/shokupan-cat/idle-loop/loop-03-inhale-pe
 import idleInhaleStartUrl from "./assets/shokupan-cat/idle-loop/loop-02-inhale-start.png";
 import idleNeutralUrl from "./assets/shokupan-cat/idle-loop/loop-01-neutral.png";
 import graceGlanceUrl from "./assets/shokupan-cat/reactions/reaction-01-grace-glance.png";
-import persistentStareUrl from "./assets/shokupan-cat/reactions/reaction-03-half-lens-stare.png";
+import persistentSideEyeUrl from "./assets/shokupan-cat/reactions/reaction-04-side-eye.png";
 import nudgePawTapUrl from "./assets/shokupan-cat/reactions/reaction-05-paw-tap.png";
 import interventionWaitUrl from "./assets/shokupan-cat/reactions/reaction-06-polite-wait.png";
 
@@ -17,6 +17,7 @@ import {
   getPetPresentation,
   getPetSnapshotPresentation,
   getPetSnapshotStatus,
+  getPetSnapshotTransitionCue,
   PET_ASSET_PATHS,
   type PetAssetPath,
   type PetHoverAction,
@@ -42,7 +43,7 @@ const petAssetUrls: Readonly<Record<PetAssetPath, string>> = {
   [PET_ASSET_PATHS.idleInhalePeak]: idleInhalePeakUrl,
   [PET_ASSET_PATHS.idleExhaleStart]: idleExhaleStartUrl,
   [PET_ASSET_PATHS.graceGlance]: graceGlanceUrl,
-  [PET_ASSET_PATHS.persistentStare]: persistentStareUrl,
+  [PET_ASSET_PATHS.persistentSideEye]: persistentSideEyeUrl,
   [PET_ASSET_PATHS.nudgePawTap]: nudgePawTapUrl,
   [PET_ASSET_PATHS.interventionWait]: interventionWaitUrl,
   [PET_ASSET_PATHS.forwardStretch]: forwardStretchUrl,
@@ -71,7 +72,6 @@ let pointerInsideHint = false;
 let forcedHintTimer: number | undefined;
 let collapseHintTimer: number | undefined;
 let currentSnapshot: SessionSnapshot | undefined;
-let previousReminderBeat = -1;
 let isDraggingPet = false;
 let queuedDragPosition:
   | { readonly screenX: number; readonly screenY: number }
@@ -147,20 +147,16 @@ export function renderPetPhase(
 }
 
 function renderPetSnapshot(snapshot: SessionSnapshot): void {
+  const transitionCue = getPetSnapshotTransitionCue(currentSnapshot, snapshot);
   currentSnapshot = snapshot;
   renderPetPhase(snapshot.phase);
-  const status = getPetSnapshotStatus(snapshot);
 
-  const isFreshReminder =
-    snapshot.phase === "intervention" &&
-    status.reminderBeat !== previousReminderBeat;
-  previousReminderBeat =
-    snapshot.phase === "intervention" ? status.reminderBeat : -1;
-
-  if (snapshot.phase === "nudge" || isFreshReminder) {
-    revealHintTemporarily(snapshot.phase === "nudge" ? 3_000 : 4_500);
+  if (transitionCue.revealHint) {
+    revealHintTemporarily(transitionCue.durationMs);
   }
-  if (isFreshReminder && !reducedMotionQuery.matches) playAttentionPop();
+  if (transitionCue.emphasizePet && !reducedMotionQuery.matches) {
+    playAttentionPop();
+  }
 }
 
 function stopPetAnimation(): void {
