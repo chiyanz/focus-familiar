@@ -41,8 +41,9 @@ A small transparent pet window remains visually present without disrupting norma
 - Grace, nudge, and intervention each use a distinct full-body reaction pose.
 - Every runtime pose shares the same center and floor anchor so state changes
   read as pose changes rather than window jumps.
-- A persistent intervention adds the full-loaf side-eye at the first 15-second
-  reminder without replacing the earlier polite-wait pose.
+- Strict intervention shows the dramatic cropped-eye pose for seven readable
+  seconds before requesting app activation. Balanced intervention adds the
+  same eye at its first 15-second reminder.
 - Every authoritative phase transition expands its status message for seven
   seconds before collapsing; the collapsed ellipsis has no leading gap.
 
@@ -51,19 +52,19 @@ A small transparent pet window remains visually present without disrupting norma
 This table is the source of truth for the default Shokupan pet pack. Changes to
 it require matching presentation tests and a visual-lab spot check.
 
-| Trigger or phase                                | Required visual                                                        | Motion and text behavior                                                                                                                                                       |
-| ----------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Ready (`idle`)                                  | `loop-01` → `loop-02` → `loop-03` → `loop-04`                          | Loop the four bottom-anchored sleeping-breath frames. Text stays collapsed until hover.                                                                                        |
-| In target app (`focused`)                       | Same four-frame sleeping-breath loop                                   | Continue calm looping; returning from an away phase restarts the loop.                                                                                                         |
-| Left target, before grace threshold (`grace`)   | `reaction-01-grace-glance`                                             | Hold the one-eye-open loaf. Do not play a hover action.                                                                                                                        |
-| Grace threshold reached (`nudge`)               | `reaction-05-paw-tap`                                                  | Hold the reaching-paw pose and reveal “Let’s head back” for seven seconds.                                                                                                     |
-| Intervention threshold reached (`intervention`) | `reaction-06-polite-wait`                                              | Hold the upright waiting pose. Increase the wrapper scale and reveal rotating return copy for seven seconds every 15 seconds. The renderer itself never activates another app. |
-| Still away 15 seconds after intervention        | `reaction-04-side-eye`                                                 | Show the aligned full-loaf side-eye as the final presentation stage. Keep the core phase as `intervention` and reveal each 15-second reminder for seven seconds.               |
-| Paused (`paused`)                               | `loop-01-neutral`                                                      | Hold neutral with no ambient or hover animation.                                                                                                                               |
-| Completed (`completed`)                         | `idle-05-forward-stretch`                                              | Hold the stretch as a quiet completion pose.                                                                                                                                   |
-| Stopped (`stopped`)                             | `loop-01-neutral`                                                      | Hold neutral with no ambient or hover animation.                                                                                                                               |
-| Pointer enters during ready/focused             | Random `idle-05-forward-stretch` or `idle-06-paw-groom`                | Play one obvious one-shot pose, avoid an immediate repeat, then resume the authoritative breathing loop.                                                                       |
-| Reduced motion enabled                          | Neutral still for ready/focused; phase-specific still for other phases | Do not loop, wiggle, pop, or play hover actions.                                                                                                                               |
+| Trigger or phase                                  | Required visual                                                            | Motion and text behavior                                                                                                                                                          |
+| ------------------------------------------------- | -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ready (`idle`)                                    | `loop-01` → `loop-02` → `loop-03` → `loop-04`                              | Loop the four bottom-anchored sleeping-breath frames. Text stays collapsed until hover.                                                                                           |
+| In target app (`focused`)                         | Same four-frame sleeping-breath loop                                       | Continue calm looping; returning from an away phase restarts the loop.                                                                                                            |
+| Left target, before grace threshold (`grace`)     | `reaction-01-grace-glance`                                                 | Hold the one-eye-open loaf. Do not play a hover action.                                                                                                                           |
+| Grace threshold reached (`nudge`)                 | `reaction-05-paw-tap`                                                      | Hold the reaching-paw pose and reveal “Let’s head back” for seven seconds.                                                                                                        |
+| Intervention threshold reached (`intervention`)   | Balanced: `reaction-06-polite-wait`; strict: `reaction-03-half-lens-stare` | Balanced holds the upright wait. Strict immediately shows the dramatic cropped eye and expands its return copy for seven seconds before the main process requests app activation. |
+| Still away 15 seconds after balanced intervention | `reaction-03-half-lens-stare`                                              | Show the dramatic cropped eye as the final presentation stage. Keep the core phase as `intervention` and reveal each 15-second reminder for seven seconds.                        |
+| Paused (`paused`)                                 | `loop-01-neutral`                                                          | Hold neutral with no ambient or hover animation.                                                                                                                                  |
+| Completed (`completed`)                           | `idle-05-forward-stretch`                                                  | Hold the stretch as a quiet completion pose.                                                                                                                                      |
+| Stopped (`stopped`)                               | `loop-01-neutral`                                                          | Hold neutral with no ambient or hover animation.                                                                                                                                  |
+| Pointer enters during ready/focused               | Random `idle-05-forward-stretch` or `idle-06-paw-groom`                    | Play one obvious one-shot pose, avoid an immediate repeat, then resume the authoritative breathing loop.                                                                          |
+| Reduced motion enabled                            | Neutral still for ready/focused; phase-specific still for other phases     | Do not loop, wiggle, pop, or play hover actions.                                                                                                                                  |
 
 Presentation priority is deterministic: a focus-phase change cancels any hover
 action immediately, then displays the phase pose. Hover can never replace
@@ -72,7 +73,8 @@ grace, nudge, intervention, pause, completion, or stop feedback.
 All default runtime PNGs use a transparent 384×512 canvas. Full-body visible
 silhouettes must be centered at x=192 ± 1 pixel, rest on y=460 ± 1 pixel, and
 remain within a 240–360 pixel width and 240–410 pixel height envelope. The
-alignment command checks these invariants for the final side-eye too.
+deliberately cropped final eye is exempt from the full-body alignment envelope,
+but remains covered by transparent-edge validation.
 
 ## Planned tests
 
@@ -88,8 +90,9 @@ an accessible presentation, and gives both the ready and focused states a
 four-frame, low-arousal sleeping breath. Grace, nudge, and intervention use
 distinct one-eye glance, paw-tap, and upright-wait poses. Hovering over the
 cat plays one of two unmistakable idle-only poses (a forward stretch or paw groom).
-At the first 15-second intervention reminder, the aligned full-loaf side-eye
-becomes the final presentation stage without adding a second policy phase;
+Strict mode immediately uses the dramatic cropped-eye pose as a seven-second
+final warning before app activation. Balanced mode uses that eye at the first
+15-second intervention reminder without adding a second policy phase;
 the picker avoids an immediate repeat, and any session phase change cancels the
 reaction before restoring the authoritative presentation. Reduced motion holds
 one still frame and suppresses hover animation.

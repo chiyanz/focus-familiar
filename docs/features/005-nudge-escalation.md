@@ -12,7 +12,8 @@ Leaving the target application triggers predictable, progressively stronger, and
 - Add visual pet-state changes and concise reminder text.
 - Add a stronger intervention with a return countdown.
 - Provide a clear action to request activation of the target application.
-- In strict mode, request activation once when prolonged distraction reaches the intervention threshold.
+- In strict mode, show a seven-second final warning at the intervention
+  threshold, then request activation once if the user is still away.
 - Provide pause, stop, and emergency-exit actions at every strong intervention.
 - Briefly acknowledge a successful return.
 
@@ -29,6 +30,8 @@ Leaving the target application triggers predictable, progressively stronger, and
 - Returning cancels pending intervention work immediately.
 - An activation failure leaves the user with a clear manual action.
 - Strict activation reports success only after macOS confirms that the target is frontmost.
+- Returning, pausing, or stopping during the strict final warning cancels its
+  pending activation request.
 - Stop and emergency-exit actions always remain available.
 - A distraction never erases previously accumulated focus time.
 
@@ -48,9 +51,24 @@ is in intervention, a low-frequency 15-second heartbeat advances authoritative
 away time and refreshes presentation. Only one heartbeat timer exists at once;
 returning, pausing, stopping, or disposal cancels it.
 
-Strict mode treats entry into the intervention phase as a reversible request for macOS to activate the configured target application. The native helper unhides the target, requests all of its existing windows, and waits for macOS to report that its bundle identifier is frontmost before returning success. Gentle and balanced modes never activate an application automatically. Repeated state delivery cannot issue repeated requests, returning to focus rearms the next away interval, and restoration into an already-intervening state has no side effect. This is intentionally friction rather than an unbreakable lock: macOS or the user may decline or immediately override activation.
+Strict mode treats entry into the intervention phase as a reversible final
+warning. The renderer immediately shows the dramatic cropped-eye pose and
+expanded return copy. After seven seconds, and only if the session is still in
+the same away episode, the native helper unhides the configured target,
+requests all of its existing windows, and waits for macOS to report that its
+bundle identifier is frontmost before returning success. Returning, pausing,
+stopping, or disposal cancels the pending timer. Gentle and balanced modes
+never activate an application automatically. Repeated state delivery cannot
+issue repeated requests, returning to focus rearms the next away interval, and
+restoration into an already-intervening state has no side effect. This is
+intentionally friction rather than an unbreakable lock: macOS or the user may
+decline or immediately override activation.
 
-Automated tests cover every schedulable phase, exact and delayed boundaries, long-timer chunking, stale callback cancellation, timer failure, sleep, duplicate intervention states, activation failure, disposal, and late asynchronous results after return, pause, stop, completion, or a newer away episode.
+Automated tests cover every schedulable phase, exact and delayed boundaries,
+the seven-second strict warning, cancellation on return, pause, or stop,
+long-timer chunking, stale callback cancellation, timer failure, sleep,
+duplicate intervention states, activation failure, disposal, and late
+asynchronous results after completion or a newer away episode.
 
 The macOS Electron smoke check also starts a real strict session, switches to a
 different running application, confirms the target is truly frontmost, and

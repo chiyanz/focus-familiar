@@ -23,7 +23,16 @@ presentation can refresh without frequent polling.
 
 Timer setup failures are explicit runtime failures and cause a running session to pause rather than silently continuing with inaccurate monitoring.
 
-On a new entry into the intervention phase, strict mode requests activation of the configured, already-running target application exactly once for that away episode. The platform helper unhides the target, asks AppKit to raise all of its existing windows, and reports success only after macOS identifies the target as frontmost. Gentle and balanced modes never activate an application automatically. Initial restoration into intervention is side-effect-free, leaving intervention invalidates pending result callbacks, and duplicate snapshots cannot retrigger the request.
+On a new entry into the intervention phase, strict mode schedules one
+cancellable activation request seven seconds later for that away episode. The
+delay gives the pet's final cropped-eye warning and expanded copy time to be
+read. Returning to the target, pausing, stopping, disposal, or a newer episode
+cancels the timer. If the user remains away, the platform helper unhides the
+configured, already-running target, asks AppKit to raise all of its existing
+windows, and reports success only after macOS identifies the target as
+frontmost. Gentle and balanced modes never activate an application
+automatically. Initial restoration into intervention is side-effect-free and
+duplicate snapshots cannot retrigger the request.
 
 The foreground observer remains the authority: an activation result never marks the session focused. The user can override the activation immediately, and pause, stop, and emergency exit remain available. Focus Familiar never closes, terminates, or blocks another application.
 
@@ -34,5 +43,7 @@ The foreground observer remains the authority: an activation result never marks 
 - Prolonged intervention performs low-frequency deterministic work until the
   user returns, pauses, or stops.
 - A strict intervention creates reversible friction but is not an unbreakable lock.
+- Strict activation waits through a visible seven-second final-warning stage;
+  this one presentation-aligned timer is owned by the intervention coordinator.
 - An activation request already handed to macOS cannot be recalled, but stale completion callbacks have no effect.
 - Presentation and manual controls can subscribe to authoritative state later without owning timing or platform policy.

@@ -15,7 +15,7 @@ export const PET_ASSET_PATHS = {
   nudgePawTap: "./assets/shokupan-cat/reactions/reaction-05-paw-tap.png",
   interventionWait:
     "./assets/shokupan-cat/reactions/reaction-06-polite-wait.png",
-  persistentSideEye: "./assets/shokupan-cat/reactions/reaction-04-side-eye.png",
+  finalEye: "./assets/shokupan-cat/reactions/reaction-03-half-lens-stare.png",
   forwardStretch:
     "./assets/shokupan-cat/idle-actions/idle-05-forward-stretch.png",
   pawGroom: "./assets/shokupan-cat/idle-actions/idle-06-paw-groom.png",
@@ -165,10 +165,10 @@ export const PET_PRESENTATIONS = {
 } as const satisfies Record<SessionPhase, PetPresentationDefinition>;
 
 export const PET_INTERVENTION_REMINDER_INTERVAL_MS = 15_000;
-export const PET_SIDE_EYE_AFTER_MS = PET_INTERVENTION_REMINDER_INTERVAL_MS;
+export const PET_FINAL_EYE_AFTER_MS = PET_INTERVENTION_REMINDER_INTERVAL_MS;
 export const PET_HINT_REVEAL_DURATION_MS = 7_000;
 
-export type PetSnapshotPresentationStage = "base" | "persistent-side-eye";
+export type PetSnapshotPresentationStage = "base" | "final-eye";
 
 export interface PetSnapshotStatus {
   readonly statusText: string;
@@ -207,7 +207,11 @@ export function getPetSnapshotStatus(
   const reminderBeat = Math.floor(
     elapsedAfterThreshold / PET_INTERVENTION_REMINDER_INTERVAL_MS,
   );
-  const isPersistentSideEye = elapsedAfterThreshold >= PET_SIDE_EYE_AFTER_MS;
+  // Strict mode uses the dramatic eye as a readable final warning before the
+  // delayed activation request. Other modes reserve it for continued absence.
+  const isFinalEye =
+    snapshot.intensity === "strict" ||
+    elapsedAfterThreshold >= PET_FINAL_EYE_AFTER_MS;
   const attentionLevel = Math.min(3, 1 + Math.floor(reminderBeat / 2)) as
     | 1
     | 2
@@ -223,10 +227,8 @@ export function getPetSnapshotStatus(
     statusText: copy[Math.min(copy.length - 1, attentionLevel - 1)] ?? copy[0],
     attentionLevel,
     reminderBeat,
-    presentationStage: isPersistentSideEye ? "persistent-side-eye" : "base",
-    presentationAsset: isPersistentSideEye
-      ? PET_ASSET_PATHS.persistentSideEye
-      : null,
+    presentationStage: isFinalEye ? "final-eye" : "base",
+    presentationAsset: isFinalEye ? PET_ASSET_PATHS.finalEye : null,
   };
 }
 
@@ -239,7 +241,7 @@ export interface PetSnapshotTransitionCue {
 /**
  * Decide whether a new authoritative snapshot deserves a readable, temporary
  * status expansion. Duplicate counter snapshots remain silent, while every
- * phase change, intervention reminder, and side-eye arrival is surfaced.
+ * phase change, intervention reminder, and final-eye arrival is surfaced.
  */
 export function getPetSnapshotTransitionCue(
   previous: SessionSnapshot | undefined,

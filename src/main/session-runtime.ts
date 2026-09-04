@@ -12,6 +12,7 @@ import type {
 } from "../platform/application";
 import {
   InterventionCoordinator,
+  STRICT_INTERVENTION_WARNING_MS,
   type InterventionActivationFailed,
   type InterventionActivationSucceeded,
 } from "./intervention-coordinator";
@@ -71,6 +72,8 @@ export class SessionRuntime {
     }
     this.defer = options.defer ?? queueMicrotask;
     this.intervention = new InterventionCoordinator(activator, {
+      activationDelayMs: STRICT_INTERVENTION_WARNING_MS,
+      timer,
       ...(options.onActivationSucceeded
         ? { onActivationSucceeded: options.onActivationSucceeded }
         : {}),
