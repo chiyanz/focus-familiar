@@ -68,10 +68,6 @@ body {
   will-change: transform;
 }
 
-.pet-shell[data-pet-motion="ambient"] .pet img {
-  animation: loaf-breath 5.8s ease-in-out infinite;
-}
-
 .pet-shell[data-pet-motion="hover-action"] .pet-visual {
   animation: curious-wiggle 1s cubic-bezier(0.22, 0.8, 0.24, 1);
 }
@@ -113,17 +109,6 @@ body {
 
   45% {
     translate: 0 -3%;
-  }
-}
-
-@keyframes loaf-breath {
-  0%,
-  100% {
-    transform: translateY(0) scale(1);
-  }
-
-  48% {
-    transform: translateY(-0.25%) scaleX(1.004) scaleY(1.012);
   }
 }
 

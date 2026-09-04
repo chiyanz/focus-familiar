@@ -1,15 +1,12 @@
 import idleForwardStretchUrl from "../renderer/assets/shokupan-cat/idle-actions/idle-05-forward-stretch.png";
-import idleCloseUrl from "../renderer/assets/shokupan-cat/idle-loop/loop-08-close.png";
-import idleEarTwitchUrl from "../renderer/assets/shokupan-cat/idle-loop/loop-06-ear-twitch.png";
-import idleEarTurnUrl from "../renderer/assets/shokupan-cat/idle-loop/loop-05-ear-turn.png";
+import idlePawGroomUrl from "../renderer/assets/shokupan-cat/idle-actions/idle-06-paw-groom.png";
 import idleExhaleStartUrl from "../renderer/assets/shokupan-cat/idle-loop/loop-04-exhale-start.png";
 import idleInhalePeakUrl from "../renderer/assets/shokupan-cat/idle-loop/loop-03-inhale-peak.png";
 import idleInhaleStartUrl from "../renderer/assets/shokupan-cat/idle-loop/loop-02-inhale-start.png";
 import idleNeutralUrl from "../renderer/assets/shokupan-cat/idle-loop/loop-01-neutral.png";
-import idleSettleUrl from "../renderer/assets/shokupan-cat/idle-loop/loop-07-settle.png";
 import graceGlanceUrl from "../renderer/assets/shokupan-cat/reactions/reaction-01-grace-glance.png";
 import interventionWaitUrl from "../renderer/assets/shokupan-cat/reactions/reaction-06-polite-wait.png";
-import nudgeStareUrl from "../renderer/assets/shokupan-cat/reactions/reaction-03-half-lens-stare.png";
+import nudgePawTapUrl from "../renderer/assets/shokupan-cat/reactions/reaction-05-paw-tap.png";
 
 import { SESSION_PHASES, type SessionPhase } from "../core";
 import { startPetAnimation } from "../renderer/pet-animation";
@@ -50,14 +47,11 @@ const petAssetUrls: Readonly<Record<PetAssetPath, string>> = {
   [PET_ASSET_PATHS.idleInhaleStart]: idleInhaleStartUrl,
   [PET_ASSET_PATHS.idleInhalePeak]: idleInhalePeakUrl,
   [PET_ASSET_PATHS.idleExhaleStart]: idleExhaleStartUrl,
-  [PET_ASSET_PATHS.idleEarTurn]: idleEarTurnUrl,
-  [PET_ASSET_PATHS.idleEarTwitch]: idleEarTwitchUrl,
-  [PET_ASSET_PATHS.idleSettle]: idleSettleUrl,
-  [PET_ASSET_PATHS.idleClose]: idleCloseUrl,
   [PET_ASSET_PATHS.graceGlance]: graceGlanceUrl,
-  [PET_ASSET_PATHS.nudgeStare]: nudgeStareUrl,
+  [PET_ASSET_PATHS.nudgePawTap]: nudgePawTapUrl,
   [PET_ASSET_PATHS.interventionWait]: interventionWaitUrl,
   [PET_ASSET_PATHS.forwardStretch]: idleForwardStretchUrl,
+  [PET_ASSET_PATHS.pawGroom]: idlePawGroomUrl,
 };
 
 function requireElement<T extends Element>(selector: string): T {
@@ -121,7 +115,7 @@ function renderPhase(phase: SessionPhase): void {
   image.alt = `Shokupan cat: ${labels.title.toLocaleLowerCase()}`;
 
   if (presentation.mode === "ambient") {
-    modeSummary.textContent = "Smooth sleeping breath · 5.8s";
+    modeSummary.textContent = "Four-frame sleeping breath · 3.5s";
   } else if (
     presentation.reducedMotion &&
     PET_PRESENTATION_HAS_AMBIENT_MOTION[phase]

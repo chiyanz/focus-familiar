@@ -1,11 +1,12 @@
-import idleCloseUrl from "./assets/shokupan-cat/idle-loop/loop-08-close.png";
-import idleEarTwitchUrl from "./assets/shokupan-cat/idle-loop/loop-06-ear-twitch.png";
-import idleEarTurnUrl from "./assets/shokupan-cat/idle-loop/loop-05-ear-turn.png";
+import forwardStretchUrl from "./assets/shokupan-cat/idle-actions/idle-05-forward-stretch.png";
+import pawGroomUrl from "./assets/shokupan-cat/idle-actions/idle-06-paw-groom.png";
 import idleExhaleStartUrl from "./assets/shokupan-cat/idle-loop/loop-04-exhale-start.png";
 import idleInhalePeakUrl from "./assets/shokupan-cat/idle-loop/loop-03-inhale-peak.png";
 import idleInhaleStartUrl from "./assets/shokupan-cat/idle-loop/loop-02-inhale-start.png";
 import idleNeutralUrl from "./assets/shokupan-cat/idle-loop/loop-01-neutral.png";
-import idleSettleUrl from "./assets/shokupan-cat/idle-loop/loop-07-settle.png";
+import graceGlanceUrl from "./assets/shokupan-cat/reactions/reaction-01-grace-glance.png";
+import nudgePawTapUrl from "./assets/shokupan-cat/reactions/reaction-05-paw-tap.png";
+import interventionWaitUrl from "./assets/shokupan-cat/reactions/reaction-06-polite-wait.png";
 
 import type { SessionPhase, SessionSnapshot } from "../shared/ipc";
 import { startPetAnimation } from "./pet-animation";
@@ -33,30 +34,25 @@ const reducedMotionQuery = window.matchMedia(
   "(prefers-reduced-motion: reduce)",
 );
 
-const petAssetUrls: Partial<Record<PetAssetPath, string>> = {
+const petAssetUrls: Readonly<Record<PetAssetPath, string>> = {
   [PET_ASSET_PATHS.idleNeutral]: idleNeutralUrl,
   [PET_ASSET_PATHS.idleInhaleStart]: idleInhaleStartUrl,
   [PET_ASSET_PATHS.idleInhalePeak]: idleInhalePeakUrl,
   [PET_ASSET_PATHS.idleExhaleStart]: idleExhaleStartUrl,
-  [PET_ASSET_PATHS.idleEarTurn]: idleEarTurnUrl,
-  [PET_ASSET_PATHS.idleEarTwitch]: idleEarTwitchUrl,
-  [PET_ASSET_PATHS.idleSettle]: idleSettleUrl,
-  [PET_ASSET_PATHS.idleClose]: idleCloseUrl,
+  [PET_ASSET_PATHS.graceGlance]: graceGlanceUrl,
+  [PET_ASSET_PATHS.nudgePawTap]: nudgePawTapUrl,
+  [PET_ASSET_PATHS.interventionWait]: interventionWaitUrl,
+  [PET_ASSET_PATHS.forwardStretch]: forwardStretchUrl,
+  [PET_ASSET_PATHS.pawGroom]: pawGroomUrl,
 };
 
-// Decode the local hover frames before the first reaction so a cold image load
-// cannot leave a blank frame in a one-second action.
-const hoverAssetsReady = Promise.allSettled(
-  [
-    PET_ASSET_PATHS.idleNeutral,
-    PET_ASSET_PATHS.idleEarTurn,
-    PET_ASSET_PATHS.idleEarTwitch,
-    PET_ASSET_PATHS.idleSettle,
-    PET_ASSET_PATHS.idleClose,
-  ].map(async (asset) => {
+// Decode every local frame before a hover action so the first interaction and
+// later focus-state swaps cannot briefly flash a blank image.
+const petAssetsReady = Promise.allSettled(
+  Object.keys(petAssetUrls).map(async (asset) => {
     const preload = new Image();
     preload.decoding = "async";
-    preload.src = petAssetUrl(asset);
+    preload.src = petAssetUrl(asset as PetAssetPath);
     await preload.decode();
   }),
 );
@@ -79,6 +75,7 @@ let queuedDragPosition:
 let dragFrame: number | undefined;
 
 function showPetAsset(asset: PetAssetPath): void {
+  if (petShell) petShell.dataset.petAsset = asset;
   if (petImage) petImage.src = petAssetUrl(asset);
 }
 
@@ -157,7 +154,7 @@ function stopPetAnimation(): void {
 }
 
 async function playRandomHoverAction(): Promise<void> {
-  await hoverAssetsReady;
+  await petAssetsReady;
   const phase = currentPhase ?? "idle";
   const reducedMotion = currentReducedMotion ?? reducedMotionQuery.matches;
   if (
