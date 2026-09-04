@@ -5,6 +5,7 @@ import idleInhalePeakUrl from "./assets/shokupan-cat/idle-loop/loop-03-inhale-pe
 import idleInhaleStartUrl from "./assets/shokupan-cat/idle-loop/loop-02-inhale-start.png";
 import idleNeutralUrl from "./assets/shokupan-cat/idle-loop/loop-01-neutral.png";
 import graceGlanceUrl from "./assets/shokupan-cat/reactions/reaction-01-grace-glance.png";
+import persistentStareUrl from "./assets/shokupan-cat/reactions/reaction-03-half-lens-stare.png";
 import nudgePawTapUrl from "./assets/shokupan-cat/reactions/reaction-05-paw-tap.png";
 import interventionWaitUrl from "./assets/shokupan-cat/reactions/reaction-06-polite-wait.png";
 
@@ -14,6 +15,7 @@ import {
   canPlayPetHoverAction,
   choosePetHoverAction,
   getPetPresentation,
+  getPetSnapshotPresentation,
   getPetSnapshotStatus,
   PET_ASSET_PATHS,
   type PetAssetPath,
@@ -40,6 +42,7 @@ const petAssetUrls: Readonly<Record<PetAssetPath, string>> = {
   [PET_ASSET_PATHS.idleInhalePeak]: idleInhalePeakUrl,
   [PET_ASSET_PATHS.idleExhaleStart]: idleExhaleStartUrl,
   [PET_ASSET_PATHS.graceGlance]: graceGlanceUrl,
+  [PET_ASSET_PATHS.persistentStare]: persistentStareUrl,
   [PET_ASSET_PATHS.nudgePawTap]: nudgePawTapUrl,
   [PET_ASSET_PATHS.interventionWait]: interventionWaitUrl,
   [PET_ASSET_PATHS.forwardStretch]: forwardStretchUrl,
@@ -59,6 +62,7 @@ const petAssetsReady = Promise.allSettled(
 
 let currentPhase: SessionPhase | undefined;
 let currentReducedMotion: boolean | undefined;
+let currentPresentationKey: string | undefined;
 let stopAnimation: (() => void) | undefined;
 let currentHoverAction: PetHoverAction | undefined;
 let previousHoverActionId: PetHoverAction["id"] | undefined;
@@ -85,21 +89,38 @@ function petAssetUrl(asset: PetAssetPath): string {
   return url;
 }
 
-function renderCurrentPhasePresentation(): void {
+function renderCurrentPhasePresentation(force = false): void {
   const phase = currentPhase ?? "idle";
   const reducedMotion = currentReducedMotion ?? reducedMotionQuery.matches;
-  const presentation = getPetPresentation(phase, reducedMotion);
+  const snapshot = currentSnapshot?.phase === phase ? currentSnapshot : null;
+  const presentation = snapshot
+    ? getPetSnapshotPresentation(snapshot, reducedMotion)
+    : getPetPresentation(phase, reducedMotion);
+  const status = snapshot ? getPetSnapshotStatus(snapshot) : null;
+  const presentationKey = [
+    phase,
+    String(reducedMotion),
+    status?.presentationStage ?? "base",
+    ...presentation.timeline.map(
+      ({ asset, durationMs }) => `${asset}:${String(durationMs)}`,
+    ),
+  ].join("|");
 
   if (petShell) {
     petShell.dataset.petPhase = phase;
-    petShell.dataset.petMotion = presentation.mode;
     petShell.dataset.reducedMotion = String(reducedMotion);
-    delete petShell.dataset.petAction;
+    petShell.dataset.petStage = status?.presentationStage ?? "base";
+    petShell.dataset.petAttention = String(status?.attentionLevel ?? 0);
   }
   if (petHint) {
-    petHint.textContent = currentSnapshot
-      ? getPetSnapshotStatus(currentSnapshot).statusText
-      : presentation.statusText;
+    petHint.textContent = status?.statusText ?? presentation.statusText;
+  }
+  if (!force && presentationKey === currentPresentationKey) return;
+
+  currentPresentationKey = presentationKey;
+  if (petShell) {
+    petShell.dataset.petMotion = presentation.mode;
+    delete petShell.dataset.petAction;
   }
 
   currentHoverAction = undefined;
@@ -120,10 +141,6 @@ export function renderPetPhase(
   phase: SessionPhase,
   reducedMotion = reducedMotionQuery.matches,
 ): void {
-  // Runtime snapshots may update counters without changing presentation.
-  // Preserve the current animation position when the visual inputs are equal.
-  if (phase === currentPhase && reducedMotion === currentReducedMotion) return;
-
   currentPhase = phase;
   currentReducedMotion = reducedMotion;
   renderCurrentPhasePresentation();
@@ -133,8 +150,6 @@ function renderPetSnapshot(snapshot: SessionSnapshot): void {
   currentSnapshot = snapshot;
   renderPetPhase(snapshot.phase);
   const status = getPetSnapshotStatus(snapshot);
-  if (petHint) petHint.textContent = status.statusText;
-  if (petShell) petShell.dataset.petAttention = String(status.attentionLevel);
 
   const isFreshReminder =
     snapshot.phase === "intervention" &&
@@ -180,7 +195,7 @@ async function playRandomHoverAction(): Promise<void> {
       // A focus-state transition cancels this player, so completion can only
       // restore the still-current ambient phase.
       if (currentHoverAction !== action) return;
-      renderCurrentPhasePresentation();
+      renderCurrentPhasePresentation(true);
     },
   });
 }

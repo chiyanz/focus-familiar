@@ -41,6 +41,8 @@ A small transparent pet window remains visually present without disrupting norma
 - Grace, nudge, and intervention each use a distinct full-body reaction pose.
 - Every runtime pose shares the same center and floor anchor so state changes
   read as pose changes rather than window jumps.
+- A persistent intervention adds the close-up side-eye after 30 seconds; it is
+  an intentional composition change, not a replacement for earlier poses.
 
 ## Presentation behavior contract
 
@@ -54,6 +56,7 @@ it require matching presentation tests and a visual-lab spot check.
 | Left target, before grace threshold (`grace`)   | `reaction-01-grace-glance`                                             | Hold the one-eye-open loaf. Do not play a hover action.                                                                                                       |
 | Grace threshold reached (`nudge`)               | `reaction-05-paw-tap`                                                  | Hold the reaching-paw pose and reveal “Let’s head back” briefly.                                                                                              |
 | Intervention threshold reached (`intervention`) | `reaction-06-polite-wait`                                              | Hold the upright waiting pose. Increase the wrapper scale and briefly reveal rotating return copy every 15 seconds; never take focus or activate another app. |
+| Still away 30 seconds after intervention        | `reaction-03-half-lens-stare`                                          | Slide in the close-up side-eye as the final presentation stage. Keep the core phase as `intervention` and continue the 15-second reminders.                   |
 | Paused (`paused`)                               | `loop-01-neutral`                                                      | Hold neutral with no ambient or hover animation.                                                                                                              |
 | Completed (`completed`)                         | `idle-05-forward-stretch`                                              | Hold the stretch as a quiet completion pose.                                                                                                                  |
 | Stopped (`stopped`)                             | `loop-01-neutral`                                                      | Hold neutral with no ambient or hover animation.                                                                                                              |
@@ -64,11 +67,13 @@ Presentation priority is deterministic: a focus-phase change cancels any hover
 action immediately, then displays the phase pose. Hover can never replace
 grace, nudge, intervention, pause, completion, or stop feedback.
 
-All default runtime PNGs use a transparent 384×512 canvas. The visible
-silhouette must be centered at x=192 ± 1 pixel, rest on y=460 ± 1 pixel, and
+All default runtime PNGs use a transparent 384×512 canvas. Full-body visible
+silhouettes must be centered at x=192 ± 1 pixel, rest on y=460 ± 1 pixel, and
 remain within a 240–360 pixel width and 240–410 pixel height envelope. The
-alignment command checks these invariants and rejects cropped close-ups such
-as the retired half-lens stare.
+alignment command checks these invariants. The final half-lens stare is the
+documented exception: it deliberately touches the left canvas edge as a
+close-up, while the edge validator still protects its transparent background
+and cocoa outline.
 
 ## Planned tests
 
@@ -83,7 +88,9 @@ Shokupan-cat runtime frames locally, maps every `SessionPhase` exhaustively to
 an accessible presentation, and gives both the ready and focused states a
 four-frame, low-arousal sleeping breath. Grace, nudge, and intervention use
 distinct one-eye glance, paw-tap, and upright-wait poses. Hovering over the
-cat plays one of two unmistakable idle-only poses (a forward stretch or paw groom);
+cat plays one of two unmistakable idle-only poses (a forward stretch or paw groom).
+After 30 seconds of continued intervention, the close-up half-lens stare
+becomes the final presentation stage without adding a second policy phase;
 the picker avoids an immediate repeat, and any session phase change cancels the
 reaction before restoring the authoritative presentation. Reduced motion holds
 one still frame and suppresses hover animation.

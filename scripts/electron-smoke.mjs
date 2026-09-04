@@ -76,7 +76,7 @@ child.stderr.on("data", (chunk) => {
   output += chunk.toString();
 });
 
-const timeout = setTimeout(() => child.kill("SIGKILL"), 20_000);
+const timeout = setTimeout(() => child.kill("SIGKILL"), 30_000);
 const exitCode = await new Promise((resolve) => child.once("exit", resolve));
 clearTimeout(timeout);
 let quitFlushedPreferences = true;

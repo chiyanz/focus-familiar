@@ -639,10 +639,10 @@ async function verifySmokeBoundary(): Promise<void> {
     `);
     if (
       !sessionResult.ok ||
-      sessionResult.appInfo.version !== "0.1.0-prototype.7" ||
+      sessionResult.appInfo.version !== "0.1.0-prototype.8" ||
       sessionResult.updateStatus.phase !== "not-checked" ||
-      sessionResult.updateStatus.currentVersion !== "0.1.0-prototype.7" ||
-      !sessionResult.renderedUpdateStatus?.includes("0.1.0-prototype.7") ||
+      sessionResult.updateStatus.currentVersion !== "0.1.0-prototype.8" ||
+      !sessionResult.renderedUpdateStatus?.includes("0.1.0-prototype.8") ||
       !sessionResult.updateCheckEnabled ||
       !sessionResult.updateReleaseHidden ||
       (expectsSmokeRecovery &&
@@ -745,6 +745,72 @@ async function verifySmokeBoundary(): Promise<void> {
     await settingsWindow.webContents.executeJavaScript(
       'window.focusFamiliar.requestSessionAction("stop")',
     );
+
+    // Exercise strict mode through the real native adapter. Success means the
+    // target was observed as frontmost, not merely that AppKit accepted a
+    // request. Restore the original app afterward so the smoke check is a
+    // reversible focus change.
+    const smokeProvider = applicationProvider;
+    const smokeRuntime = sessionRuntime;
+    if (!smokeProvider || !smokeRuntime) {
+      throw new Error("Strict activation smoke dependencies are unavailable.");
+    }
+    const originalApplication = await smokeProvider.currentApplication();
+    const runningApplications = await smokeProvider.listApplications();
+    if (!originalApplication.ok || !runningApplications.ok) {
+      throw new Error("Strict activation smoke setup failed.");
+    }
+    const strictTarget =
+      runningApplications.value.find(
+        ({ bundleId }) =>
+          bundleId === "com.apple.finder" &&
+          bundleId !== originalApplication.value.bundleId,
+      ) ??
+      runningApplications.value.find(
+        ({ bundleId }) => bundleId !== originalApplication.value.bundleId,
+      );
+    if (!strictTarget) {
+      throw new Error("Strict activation smoke found no alternate target.");
+    }
+    const strictStart = await smokeRuntime.startSession("strict-smoke", {
+      task: "Verify focus app activation",
+      targetApplication: strictTarget,
+      durationMs: 60_000,
+      gracePeriodMs: 200,
+      interventionAfterMs: 800,
+      intensity: "strict",
+    });
+    if (!strictStart.ok) {
+      throw new Error(
+        `Strict activation smoke could not start: ${strictStart.error.message}`,
+      );
+    }
+    for (let attempt = 0; attempt < 60; attempt += 1) {
+      if (smokeRuntime.snapshot().phase === "focused") break;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    const strictFrontmost = await smokeProvider.currentApplication();
+    if (
+      smokeRuntime.snapshot().phase !== "focused" ||
+      !strictFrontmost.ok ||
+      strictFrontmost.value.bundleId !== strictTarget.bundleId
+    ) {
+      throw new Error(
+        `Strict activation smoke failed: ${JSON.stringify({ state: smokeRuntime.snapshot().phase, strictFrontmost, strictTarget })}`,
+      );
+    }
+    smokeRuntime.stop("user");
+    if (smokeProvider instanceof MacOSApplicationAdapter) {
+      const restoredApplication = await smokeProvider.activate(
+        originalApplication.value.bundleId,
+      );
+      if (!restoredApplication.ok) {
+        throw new Error(
+          `Strict activation smoke could not restore the original app: ${restoredApplication.error.message}`,
+        );
+      }
+    }
+
     await settingsWindow.webContents.executeJavaScript(`
       (() => {
         const taskInput = document.querySelector("#task");

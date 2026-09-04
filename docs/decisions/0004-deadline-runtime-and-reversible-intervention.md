@@ -8,7 +8,7 @@ Date: 2026-09-02
 
 Foreground-application changes are event-driven, but a session can cross its grace, intervention, or completion threshold while the foreground application stays unchanged. A frequent polling loop would waste work and make boundary behavior depend on polling cadence. Relative timers alone are also insufficient because the operating system may delay a callback while busy or suspended.
 
-The product also needs a stronger strict mode without pretending it can or should trap the user. macOS application activation is a request, not proof that the target became foreground.
+The product also needs a stronger strict mode without pretending it can or should trap the user. macOS application activation begins as a request, so the native boundary must verify the resulting foreground application before reporting success.
 
 ## Decision
 
@@ -23,7 +23,7 @@ presentation can refresh without frequent polling.
 
 Timer setup failures are explicit runtime failures and cause a running session to pause rather than silently continuing with inaccurate monitoring.
 
-On a new entry into the intervention phase, strict mode requests activation of the configured, already-running target application exactly once for that away episode. Gentle and balanced modes never activate an application automatically. Initial restoration into intervention is side-effect-free, leaving intervention invalidates pending result callbacks, and duplicate snapshots cannot retrigger the request.
+On a new entry into the intervention phase, strict mode requests activation of the configured, already-running target application exactly once for that away episode. The platform helper unhides the target, asks AppKit to raise all of its existing windows, and reports success only after macOS identifies the target as frontmost. Gentle and balanced modes never activate an application automatically. Initial restoration into intervention is side-effect-free, leaving intervention invalidates pending result callbacks, and duplicate snapshots cannot retrigger the request.
 
 The foreground observer remains the authority: an activation result never marks the session focused. The user can override the activation immediately, and pause, stop, and emergency exit remain available. Focus Familiar never closes, terminates, or blocks another application.
 

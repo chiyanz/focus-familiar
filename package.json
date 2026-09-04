@@ -1,8 +1,8 @@
 {
   "name": "focus-familiar",
   "productName": "Focus Familiar",
-  "version": "0.1.0-prototype.7",
-  "focusFamiliarBuildNumber": 7,
+  "version": "0.1.0-prototype.8",
+  "focusFamiliarBuildNumber": 8,
   "description": "A local-first productivity pet for macOS.",
   "private": true,
   "type": "module",

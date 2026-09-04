@@ -28,6 +28,7 @@ Leaving the target application triggers predictable, progressively stronger, and
 - Each intervention occurs at its configured threshold exactly once per away interval.
 - Returning cancels pending intervention work immediately.
 - An activation failure leaves the user with a clear manual action.
+- Strict activation reports success only after macOS confirms that the target is frontmost.
 - Stop and emergency-exit actions always remain available.
 - A distraction never erases previously accumulated focus time.
 
@@ -47,9 +48,13 @@ is in intervention, a low-frequency 15-second heartbeat advances authoritative
 away time and refreshes presentation. Only one heartbeat timer exists at once;
 returning, pausing, stopping, or disposal cancels it.
 
-Strict mode treats entry into the intervention phase as a reversible request for macOS to activate the configured target application. Gentle and balanced modes never activate an application automatically. Repeated state delivery cannot issue repeated requests, returning to focus rearms the next away interval, and restoration into an already-intervening state has no side effect. This is intentionally friction rather than an unbreakable lock: macOS or the user may decline or immediately override activation.
+Strict mode treats entry into the intervention phase as a reversible request for macOS to activate the configured target application. The native helper unhides the target, requests all of its existing windows, and waits for macOS to report that its bundle identifier is frontmost before returning success. Gentle and balanced modes never activate an application automatically. Repeated state delivery cannot issue repeated requests, returning to focus rearms the next away interval, and restoration into an already-intervening state has no side effect. This is intentionally friction rather than an unbreakable lock: macOS or the user may decline or immediately override activation.
 
 Automated tests cover every schedulable phase, exact and delayed boundaries, long-timer chunking, stale callback cancellation, timer failure, sleep, duplicate intervention states, activation failure, disposal, and late asynchronous results after return, pause, stop, completion, or a newer away episode.
+
+The macOS Electron smoke check also starts a real strict session, switches to a
+different running application, confirms the target is truly frontmost, and
+restores the original foreground application afterward.
 
 The approved Shokupan-cat presentation is now connected to live focus phases.
 Grace and nudge copy is concise. Intervention reminders briefly reveal the
