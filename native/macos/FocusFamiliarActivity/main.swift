@@ -91,10 +91,21 @@ private enum FocusFamiliarActivity {
             )
         }
 
-        // This is an activation request only. It never terminates or otherwise
-        // changes another application's state.
-        let didActivate = application.activate(options: [])
-        if didActivate {
+        // Unhide first and ask AppKit to raise every existing window. The
+        // previous empty option set could report that the request was sent
+        // while leaving a hidden target visually behind the current app.
+        // This remains reversible: it never opens a document, terminates an
+        // app, or prevents the user from switching away again.
+        if application.isHidden {
+            _ = application.unhide()
+        }
+        let didRequestActivation = application.activate(options: [.activateAllWindows])
+        let didBecomeFrontmost = didRequestActivation && waitForFrontmost(
+            bundleID: bundleID,
+            workspace: workspace,
+            timeout: 2.5
+        )
+        if didBecomeFrontmost {
             writer.emit(.activation(
                 application: record,
                 success: true,
@@ -106,9 +117,30 @@ private enum FocusFamiliarActivity {
                 success: false,
                 operation: "activate",
                 code: "activation-failed",
-                message: "macOS did not accept the activation request."
+                message: didRequestActivation
+                    ? "macOS accepted the request, but the application did not become frontmost."
+                    : "macOS did not accept the activation request."
             ))
         }
+    }
+
+    private static func waitForFrontmost(
+        bundleID: String,
+        workspace: NSWorkspace,
+        timeout: TimeInterval
+    ) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            if workspace.frontmostApplication?.bundleIdentifier == bundleID {
+                return true
+            }
+            _ = RunLoop.current.run(
+                mode: .default,
+                before: min(deadline, Date().addingTimeInterval(0.05))
+            )
+        } while Date() < deadline
+
+        return workspace.frontmostApplication?.bundleIdentifier == bundleID
     }
 
     private static func observe(workspace: NSWorkspace, writer: EventWriter) {

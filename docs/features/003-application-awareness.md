@@ -43,11 +43,11 @@ The main process receives reliable, timestamped changes to the frontmost macOS a
 - Added a TypeScript platform boundary with replaceable `ActivityProvider` and `ApplicationActivator` interfaces, injected clocks, runtime protocol validation, bounded output, request and observation-readiness timeouts, duplicate activation suppression, and idempotent disposal.
 - Added a main-process session bridge that forwards normalized activation facts to the pure focus engine. Sleep and observation failure safely pause a running session; wake does not auto-resume, so suspended time cannot become a false distraction interval.
 - Development and production builds compile the helper for the host architecture with a macOS 13 deployment target. Linux CI deliberately skips this platform-specific build; macOS CI compiles it and the Electron smoke test verifies that the helper can report the current application.
-- The helper requires no Accessibility, Screen Recording, Input Monitoring, Full Disk Access, or Automation permission. Activation is a best-effort macOS request and failures remain explicit.
+- The helper requires no Accessibility, Screen Recording, Input Monitoring, Full Disk Access, or Automation permission. Activation unhides the target, asks AppKit to raise all of its existing windows, and waits up to 2.5 seconds for `frontmostApplication` to confirm the switch. If macOS accepts the request but the target never becomes frontmost, the helper reports an explicit failure instead of claiming success.
 
 ## Verification
 
 - Unit and contract tests cover protocol validation, split UTF-8 frames, bounded output, list completeness/deduplication, current application, activation success/failure, lifecycle deduplication, process failure, and cleanup.
 - Focus-engine integration tests cover foreground transitions plus fail-safe pause across sleep and observation failure.
-- The Swift helper compiles with Swift 5 language compatibility on a Swift 6 toolchain, and its current/list/invalid-activation command paths have been exercised on macOS.
+- The Swift helper compiles with Swift 5 language compatibility on a Swift 6 toolchain, and its current/list/invalid-activation command paths have been exercised on macOS. A real activation check brought VS Code to the foreground, confirmed its bundle identifier through the same helper, and restored the original foreground app.
 - Manual switching across VS Code, Terminal, Finder, a browser, Spaces, and sleep/wake remains required before this feature can move to **Verified**.

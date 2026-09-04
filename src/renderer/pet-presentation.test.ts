@@ -9,10 +9,12 @@ import {
   canPlayPetHoverAction,
   choosePetHoverAction,
   getPetPresentation,
+  getPetSnapshotPresentation,
   getPetSnapshotStatus,
   PET_ASSET_PATHS,
   PET_HOVER_ACTIONS,
   PET_PRESENTATIONS,
+  PET_PERSISTENT_STARE_AFTER_MS,
   SLEEPING_BREATH_TIMELINE,
 } from "./pet-presentation";
 
@@ -147,6 +149,7 @@ describe("pet presentation", () => {
       PET_ASSET_PATHS.graceGlance,
       PET_ASSET_PATHS.nudgePawTap,
       PET_ASSET_PATHS.interventionWait,
+      PET_ASSET_PATHS.persistentStare,
     ]);
     const ambientAssets = new Set<string>(
       SLEEPING_BREATH_TIMELINE.map(({ asset }) => asset),
@@ -194,6 +197,18 @@ describe("pet presentation", () => {
       statusText: "Time to return to Editor",
       attentionLevel: 1,
       reminderBeat: 0,
+      presentationStage: "base",
+      presentationAsset: null,
+    });
+    expect(
+      getPetSnapshotStatus({
+        ...base,
+        currentAwayMs:
+          base.interventionAfterMs + PET_PERSISTENT_STARE_AFTER_MS - 1,
+      }),
+    ).toMatchObject({
+      presentationStage: "base",
+      presentationAsset: null,
     });
     expect(
       getPetSnapshotStatus({
@@ -205,6 +220,8 @@ describe("pet presentation", () => {
       statusText: "Editor is waiting",
       attentionLevel: 2,
       reminderBeat: 2,
+      presentationStage: "persistent-stare",
+      presentationAsset: PET_ASSET_PATHS.persistentStare,
     });
     expect(
       getPetSnapshotStatus({
@@ -216,6 +233,40 @@ describe("pet presentation", () => {
       statusText: "Let’s return to Editor",
       attentionLevel: 3,
       reminderBeat: 4,
+      presentationStage: "persistent-stare",
+      presentationAsset: PET_ASSET_PATHS.persistentStare,
     });
+  });
+
+  it("adds the close-up stare only after prolonged intervention", () => {
+    const snapshot = {
+      schemaVersion: 1 as const,
+      sessionId: "session-1",
+      phase: "intervention" as const,
+      task: "Ship",
+      targetApplication: { bundleId: "com.example.Editor", name: "Editor" },
+      durationMs: 60_000,
+      gracePeriodMs: 1_000,
+      interventionAfterMs: 5_000,
+      intensity: "balanced" as const,
+      focusedMs: 0,
+      awayMs: 35_000,
+      currentAwayMs: 35_000,
+      capabilities: {
+        canStart: false,
+        canPause: true,
+        canResume: false,
+        canStop: true,
+      },
+    };
+
+    expect(getPetSnapshotPresentation(snapshot)).toMatchObject({
+      phase: "intervention",
+      timeline: [{ asset: PET_ASSET_PATHS.persistentStare, durationMs: null }],
+      mode: "still",
+    });
+    expect(PET_ASSET_PATHS.persistentStare).toContain(
+      "reaction-03-half-lens-stare",
+    );
   });
 });

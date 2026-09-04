@@ -15,6 +15,8 @@ export const PET_ASSET_PATHS = {
   nudgePawTap: "./assets/shokupan-cat/reactions/reaction-05-paw-tap.png",
   interventionWait:
     "./assets/shokupan-cat/reactions/reaction-06-polite-wait.png",
+  persistentStare:
+    "./assets/shokupan-cat/reactions/reaction-03-half-lens-stare.png",
   forwardStretch:
     "./assets/shokupan-cat/idle-actions/idle-05-forward-stretch.png",
   pawGroom: "./assets/shokupan-cat/idle-actions/idle-06-paw-groom.png",
@@ -164,11 +166,16 @@ export const PET_PRESENTATIONS = {
 } as const satisfies Record<SessionPhase, PetPresentationDefinition>;
 
 export const PET_INTERVENTION_REMINDER_INTERVAL_MS = 15_000;
+export const PET_PERSISTENT_STARE_AFTER_MS = 30_000;
+
+export type PetSnapshotPresentationStage = "base" | "persistent-stare";
 
 export interface PetSnapshotStatus {
   readonly statusText: string;
   readonly attentionLevel: 0 | 1 | 2 | 3;
   readonly reminderBeat: number;
+  readonly presentationStage: PetSnapshotPresentationStage;
+  readonly presentationAsset: PetAssetPath | null;
 }
 
 /**
@@ -184,7 +191,13 @@ export function getPetSnapshotStatus(
     snapshot.phase !== "intervention" ||
     snapshot.interventionAfterMs === null
   ) {
-    return { statusText: base, attentionLevel: 0, reminderBeat: 0 };
+    return {
+      statusText: base,
+      attentionLevel: 0,
+      reminderBeat: 0,
+      presentationStage: "base",
+      presentationAsset: null,
+    };
   }
 
   const elapsedAfterThreshold = Math.max(
@@ -194,6 +207,8 @@ export function getPetSnapshotStatus(
   const reminderBeat = Math.floor(
     elapsedAfterThreshold / PET_INTERVENTION_REMINDER_INTERVAL_MS,
   );
+  const isPersistentStare =
+    elapsedAfterThreshold >= PET_PERSISTENT_STARE_AFTER_MS;
   const attentionLevel = Math.min(3, 1 + Math.floor(reminderBeat / 2)) as
     | 1
     | 2
@@ -209,6 +224,33 @@ export function getPetSnapshotStatus(
     statusText: copy[Math.min(copy.length - 1, attentionLevel - 1)] ?? copy[0],
     attentionLevel,
     reminderBeat,
+    presentationStage: isPersistentStare ? "persistent-stare" : "base",
+    presentationAsset: isPersistentStare
+      ? PET_ASSET_PATHS.persistentStare
+      : null,
+  };
+}
+
+/**
+ * Resolve snapshot-aware art without adding another policy phase. Prolonged
+ * intervention can therefore change presentation while the core session
+ * remains in its single, deterministic intervention state.
+ */
+export function getPetSnapshotPresentation(
+  snapshot: SessionSnapshot,
+  reducedMotion = false,
+): PetPresentation {
+  const base = getPetPresentation(snapshot.phase, reducedMotion);
+  const status = getPetSnapshotStatus(snapshot);
+  if (!status.presentationAsset) {
+    return { ...base, statusText: status.statusText };
+  }
+
+  return {
+    ...base,
+    timeline: [{ asset: status.presentationAsset, durationMs: null }],
+    mode: "still",
+    statusText: status.statusText,
   };
 }
 
