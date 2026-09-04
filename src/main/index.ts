@@ -646,10 +646,10 @@ async function verifySmokeBoundary(): Promise<void> {
     `);
     if (
       !sessionResult.ok ||
-      sessionResult.appInfo.version !== "0.1.0-prototype.9" ||
+      sessionResult.appInfo.version !== "0.1.0-prototype.10" ||
       sessionResult.updateStatus.phase !== "not-checked" ||
-      sessionResult.updateStatus.currentVersion !== "0.1.0-prototype.9" ||
-      !sessionResult.renderedUpdateStatus?.includes("0.1.0-prototype.9") ||
+      sessionResult.updateStatus.currentVersion !== "0.1.0-prototype.10" ||
+      !sessionResult.renderedUpdateStatus?.includes("0.1.0-prototype.10") ||
       !sessionResult.updateCheckEnabled ||
       !sessionResult.updateReleaseHidden ||
       (expectsSmokeRecovery &&
@@ -764,18 +764,18 @@ async function verifySmokeBoundary(): Promise<void> {
           asset: document.querySelector('.pet-shell')?.dataset.petAsset,
           hintVisible: document.querySelector('.pet-shell')?.dataset.hintVisible
         })`);
-      if (sideEyePresentation?.stage === "persistent-side-eye") break;
+      if (sideEyePresentation?.stage === "final-eye") break;
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
     if (
       sideEyePresentation?.phase !== "intervention" ||
-      sideEyePresentation.stage !== "persistent-side-eye" ||
+      sideEyePresentation.stage !== "final-eye" ||
       sideEyePresentation.asset !==
-        "./assets/shokupan-cat/reactions/reaction-04-side-eye.png" ||
+        "./assets/shokupan-cat/reactions/reaction-03-half-lens-stare.png" ||
       sideEyePresentation.hintVisible !== "true"
     ) {
       throw new Error(
-        `Pet side-eye transition smoke check failed: ${JSON.stringify(sideEyePresentation)}`,
+        `Pet final-eye transition smoke check failed: ${JSON.stringify(sideEyePresentation)}`,
       );
     }
     await settingsWindow.webContents.executeJavaScript(
@@ -821,7 +821,32 @@ async function verifySmokeBoundary(): Promise<void> {
         `Strict activation smoke could not start: ${strictStart.error.message}`,
       );
     }
-    for (let attempt = 0; attempt < 60; attempt += 1) {
+    let strictWarning:
+      | {
+          readonly phase?: string;
+          readonly stage?: string;
+          readonly hint?: string;
+        }
+      | undefined;
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      strictWarning = await petWindow.webContents.executeJavaScript(`({
+        phase: document.querySelector('.pet-shell')?.dataset.petPhase,
+        stage: document.querySelector('.pet-shell')?.dataset.petStage,
+        hint: document.querySelector('.pet-shell')?.dataset.hintVisible
+      })`);
+      if (strictWarning?.phase === "intervention") break;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    if (
+      strictWarning?.phase !== "intervention" ||
+      strictWarning.stage !== "final-eye" ||
+      strictWarning.hint !== "true"
+    ) {
+      throw new Error(
+        `Strict final-warning smoke failed: ${JSON.stringify(strictWarning)}`,
+      );
+    }
+    for (let attempt = 0; attempt < 120; attempt += 1) {
       if (smokeRuntime.snapshot().phase === "focused") break;
       await new Promise((resolve) => setTimeout(resolve, 100));
     }

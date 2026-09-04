@@ -97,9 +97,9 @@ body {
   transform: scale(1.085);
 }
 
-.pet-shell[data-pet-stage="persistent-side-eye"] .pet-visual {
+.pet-shell[data-pet-stage="final-eye"] .pet-visual {
   transform: scale(1.1);
-  animation: persistent-side-eye-arrival 700ms cubic-bezier(0.2, 0.9, 0.3, 1);
+  animation: final-eye-arrival 700ms cubic-bezier(0.2, 0.9, 0.3, 1);
 }
 
 .pet-visual.attention-pop {
@@ -117,7 +117,7 @@ body {
   }
 }
 
-@keyframes persistent-side-eye-arrival {
+@keyframes final-eye-arrival {
   0% {
     translate: -5% 0;
     opacity: 0.72;

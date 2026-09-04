@@ -1184,7 +1184,7 @@ function renderIntensityHelp(): void {
   if (!intensityHelp) return;
   intensityHelp.textContent =
     readIntensity(intensitySelect?.value) === "strict"
-      ? "At the intervention threshold, the pet asks macOS once to unhide your focus app and bring all its windows forward."
+      ? "Strict shows a seven-second final warning, then asks macOS once to unhide your focus app and bring all its windows forward."
       : "The pet uses stronger visual reminders as you stay away; it never changes apps.";
 }
 

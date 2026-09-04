@@ -19,6 +19,7 @@ import {
   type SessionRuntimeTimerDriver,
 } from "./session-runtime";
 import type { SessionDeadlineTimerHandle } from "./session-deadline-scheduler";
+import { STRICT_INTERVENTION_WARNING_MS } from "./intervention-coordinator";
 
 const editor = { bundleId: "com.example.Editor", name: "Editor" };
 const browser = { bundleId: "com.example.Browser", name: "Browser" };
@@ -186,12 +187,19 @@ describe("session runtime", () => {
       phase: "intervention",
       lastEventAtMs: 3_000,
     });
+    expect(timer.entries[2]?.delayMs).toBe(14_000);
+    expect(timer.entries[3]?.delayMs).toBe(STRICT_INTERVENTION_WARNING_MS);
+    expect(activator.activate).not.toHaveBeenCalled();
+
+    clock.value = 10_000;
+    timer.fire(3);
+    await Promise.resolve();
     expect(activator.activate).toHaveBeenCalledOnce();
     expect(activator.activate).toHaveBeenCalledWith(editor.bundleId);
 
     provider.emit({
       type: "application-activated",
-      atMs: 4_001,
+      atMs: 10_001,
       application: editor,
     });
     expect(runtime.snapshot().phase).toBe("focused");
@@ -226,6 +234,12 @@ describe("session runtime", () => {
       lastEventAtMs: 3_000,
     });
     expect(timer.entries[2]?.delayMs).toBe(15_000);
+    expect(timer.entries[3]?.delayMs).toBe(STRICT_INTERVENTION_WARNING_MS);
+    expect(activator.activate).not.toHaveBeenCalled();
+
+    clock.value = 10_000;
+    timer.fire(3);
+    await Promise.resolve();
     expect(activator.activate).toHaveBeenCalledOnce();
 
     clock.value = 18_000;
@@ -235,7 +249,7 @@ describe("session runtime", () => {
       currentAwayMs: 18_000,
       lastEventAtMs: 18_000,
     });
-    expect(timer.entries[3]?.delayMs).toBe(15_000);
+    expect(timer.entries[4]?.delayMs).toBe(15_000);
     expect(activator.activate).toHaveBeenCalledOnce();
 
     // Repeated delivery of the same host callback cannot create a duplicate
@@ -244,6 +258,45 @@ describe("session runtime", () => {
     expect(runtime.snapshot().lastEventAtMs).toBe(18_000);
     expect(activator.activate).toHaveBeenCalledOnce();
   });
+
+  it.each(["pause", "stop", "return"] as const)(
+    "cancels strict activation when the user chooses to %s during the final warning",
+    async (action) => {
+      const provider = new FakeActivityProvider();
+      provider.current = browser;
+      const activator = new FakeActivator();
+      const clock = new FakeClock();
+      const timer = new FakeTimer();
+      const runtime = new SessionRuntime(provider, activator, clock, timer);
+      runtime.startMonitoring();
+
+      await runtime.startSession("session-1", strictConfig);
+      clock.value = 1_000;
+      timer.fire(0);
+      clock.value = 3_000;
+      timer.fire(1);
+      expect(runtime.snapshot().phase).toBe("intervention");
+      expect(timer.entries[3]?.delayMs).toBe(STRICT_INTERVENTION_WARNING_MS);
+
+      clock.value = 4_000;
+      if (action === "pause") {
+        runtime.pause();
+      } else if (action === "stop") {
+        runtime.stop("user");
+      } else {
+        provider.emit({
+          type: "application-activated",
+          atMs: clock.value,
+          application: editor,
+        });
+      }
+
+      timer.fire(3);
+      await Promise.resolve();
+      expect(timer.entries[3]?.canceled).toBe(true);
+      expect(activator.activate).not.toHaveBeenCalled();
+    },
+  );
 
   it("pauses at the last safe boundary when timer scheduling fails", async () => {
     const provider = new FakeActivityProvider();

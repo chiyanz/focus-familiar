@@ -8,8 +8,11 @@ import type {
 } from "../platform/application";
 import {
   InterventionCoordinator,
+  STRICT_INTERVENTION_WARNING_MS,
   type InterventionActivationFailed,
   type InterventionActivationSucceeded,
+  type InterventionTimerDriver,
+  type InterventionTimerHandle,
 } from "./intervention-coordinator";
 
 const editor: ApplicationIdentity = {
@@ -40,6 +43,39 @@ class FakeActivator implements ApplicationActivator {
   activate(bundleId: string): Promise<PlatformResult<ApplicationIdentity>> {
     this.calls.push(bundleId);
     return this.implementation?.(bundleId) ?? Promise.resolve(this.response);
+  }
+}
+
+class FakeInterventionTimer implements InterventionTimerDriver {
+  readonly entries: Array<{
+    readonly handle: number;
+    readonly callback: () => void;
+    readonly delayMs: number;
+    canceled: boolean;
+  }> = [];
+  throwOnSchedule = false;
+
+  readonly schedule = vi.fn(
+    (callback: () => void, delayMs: number): InterventionTimerHandle => {
+      if (this.throwOnSchedule) throw new Error("warning timer unavailable");
+      const entry = {
+        handle: this.entries.length + 1,
+        callback,
+        delayMs,
+        canceled: false,
+      };
+      this.entries.push(entry);
+      return entry.handle;
+    },
+  );
+
+  readonly cancel = vi.fn((handle: InterventionTimerHandle): void => {
+    const entry = this.entries.find((candidate) => candidate.handle === handle);
+    if (entry) entry.canceled = true;
+  });
+
+  fire(index: number): void {
+    this.entries[index]?.callback();
   }
 }
 
@@ -130,6 +166,75 @@ describe("InterventionCoordinator", () => {
       sessionId: "session-1",
       targetApplication: editor,
       activatedApplication: editor,
+    });
+  });
+
+  it("holds the strict final warning for seven seconds before activation", async () => {
+    const activator = new FakeActivator();
+    const timer = new FakeInterventionTimer();
+    const coordinator = new InterventionCoordinator(activator, {
+      activationDelayMs: STRICT_INTERVENTION_WARNING_MS,
+      timer,
+    });
+
+    coordinator.synchronize(sessionState("focused"));
+    coordinator.synchronize(sessionState("intervention"));
+    coordinator.synchronize(sessionState("intervention"));
+
+    expect(activator.calls).toEqual([]);
+    expect(timer.schedule).toHaveBeenCalledOnce();
+    expect(timer.entries[0]?.delayMs).toBe(7_000);
+
+    timer.fire(0);
+    await flushAsyncWork();
+
+    expect(activator.calls).toEqual([editor.bundleId]);
+  });
+
+  it.each(["focused", "paused", "stopped"] as const)(
+    "cancels the delayed strict activation after transition to %s",
+    async (phase) => {
+      const activator = new FakeActivator();
+      const timer = new FakeInterventionTimer();
+      const coordinator = new InterventionCoordinator(activator, {
+        activationDelayMs: STRICT_INTERVENTION_WARNING_MS,
+        timer,
+      });
+
+      coordinator.synchronize(sessionState("focused"));
+      coordinator.synchronize(sessionState("intervention"));
+      coordinator.synchronize(sessionState(phase));
+      timer.fire(0);
+      await flushAsyncWork();
+
+      expect(timer.entries[0]?.canceled).toBe(true);
+      expect(activator.calls).toEqual([]);
+    },
+  );
+
+  it("reports a final-warning timer failure without activating", async () => {
+    const activator = new FakeActivator();
+    const timer = new FakeInterventionTimer();
+    timer.throwOnSchedule = true;
+    const failed = vi.fn<(result: InterventionActivationFailed) => void>();
+    const coordinator = new InterventionCoordinator(activator, {
+      activationDelayMs: STRICT_INTERVENTION_WARNING_MS,
+      timer,
+      onActivationFailed: failed,
+    });
+
+    coordinator.synchronize(sessionState("focused"));
+    coordinator.synchronize(sessionState("intervention"));
+    await flushAsyncWork();
+
+    expect(activator.calls).toEqual([]);
+    expect(failed).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      targetApplication: editor,
+      error: {
+        code: "activation-delay-failed",
+        message: "warning timer unavailable",
+      },
     });
   });
 

@@ -5,7 +5,7 @@ import idleInhalePeakUrl from "./assets/shokupan-cat/idle-loop/loop-03-inhale-pe
 import idleInhaleStartUrl from "./assets/shokupan-cat/idle-loop/loop-02-inhale-start.png";
 import idleNeutralUrl from "./assets/shokupan-cat/idle-loop/loop-01-neutral.png";
 import graceGlanceUrl from "./assets/shokupan-cat/reactions/reaction-01-grace-glance.png";
-import persistentSideEyeUrl from "./assets/shokupan-cat/reactions/reaction-04-side-eye.png";
+import finalEyeUrl from "./assets/shokupan-cat/reactions/reaction-03-half-lens-stare.png";
 import nudgePawTapUrl from "./assets/shokupan-cat/reactions/reaction-05-paw-tap.png";
 import interventionWaitUrl from "./assets/shokupan-cat/reactions/reaction-06-polite-wait.png";
 
@@ -43,7 +43,7 @@ const petAssetUrls: Readonly<Record<PetAssetPath, string>> = {
   [PET_ASSET_PATHS.idleInhalePeak]: idleInhalePeakUrl,
   [PET_ASSET_PATHS.idleExhaleStart]: idleExhaleStartUrl,
   [PET_ASSET_PATHS.graceGlance]: graceGlanceUrl,
-  [PET_ASSET_PATHS.persistentSideEye]: persistentSideEyeUrl,
+  [PET_ASSET_PATHS.finalEye]: finalEyeUrl,
   [PET_ASSET_PATHS.nudgePawTap]: nudgePawTapUrl,
   [PET_ASSET_PATHS.interventionWait]: interventionWaitUrl,
   [PET_ASSET_PATHS.forwardStretch]: forwardStretchUrl,

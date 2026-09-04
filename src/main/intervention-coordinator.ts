@@ -26,11 +26,26 @@ export interface InterventionActivationFailed
   readonly error: PlatformError;
 }
 
+export const STRICT_INTERVENTION_WARNING_MS = 7_000;
+
+export type InterventionTimerHandle = ReturnType<typeof setTimeout> | number;
+
+export interface InterventionTimerDriver {
+  readonly schedule: (
+    callback: () => void,
+    delayMs: number,
+  ) => InterventionTimerHandle;
+  readonly cancel: (handle: InterventionTimerHandle) => void;
+}
+
 export interface InterventionCoordinatorOptions {
   readonly onActivationSucceeded?: (
     result: InterventionActivationSucceeded,
   ) => void;
   readonly onActivationFailed?: (result: InterventionActivationFailed) => void;
+  /** Production passes the session timer; zero preserves direct unit use. */
+  readonly activationDelayMs?: number;
+  readonly timer?: InterventionTimerDriver;
 }
 
 /**
@@ -41,21 +56,36 @@ export interface InterventionCoordinatorOptions {
  * session must not immediately activate an application. A subsequent phase
  * entry consumes one activation opportunity, and a phase exit rearms it.
  *
- * This class does not own a timer, observe applications, or attempt to trap a
- * user. It only asks an injected activator to focus an already-running target
- * application. The request result is reported to observers, but never feeds
- * back into synchronization or causes another side effect.
+ * The production runtime gives this class a cancellable timer so the final
+ * warning remains visible before activation. It never observes applications
+ * or attempts to trap a user. The request result is reported to observers,
+ * but never feeds back into synchronization or causes another side effect.
  */
 export class InterventionCoordinator {
   private previousState: FocusSessionState | undefined;
   private activationArmed = true;
   private episodeGeneration = 0;
   private disposed = false;
+  private pendingActivation: InterventionTimerHandle | undefined;
+  private readonly activationDelayMs: number;
+  private readonly timer: InterventionTimerDriver;
 
   constructor(
     private readonly activator: ApplicationActivator,
     private readonly options: InterventionCoordinatorOptions = {},
-  ) {}
+  ) {
+    this.activationDelayMs = options.activationDelayMs ?? 0;
+    if (
+      !Number.isSafeInteger(this.activationDelayMs) ||
+      this.activationDelayMs < 0
+    ) {
+      throw new RangeError("activationDelayMs must be a non-negative integer.");
+    }
+    this.timer = options.timer ?? {
+      schedule: (callback, delayMs) => setTimeout(callback, delayMs),
+      cancel: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
+    };
+  }
 
   /**
    * Reconciles one authoritative session snapshot.
@@ -78,8 +108,7 @@ export class InterventionCoordinator {
 
     if (state.phase !== "intervention") {
       if (previousState.phase === "intervention") {
-        this.episodeGeneration += 1;
-        this.activationArmed = true;
+        this.invalidateEpisode(true);
       }
       return;
     }
@@ -95,7 +124,7 @@ export class InterventionCoordinator {
       // Treat that as a return for purposes of in-flight result delivery, but
       // do not rearm until the reducer reports a new intervention episode.
       if (!isTargetForeground(previousState) && isTargetForeground(state)) {
-        this.episodeGeneration += 1;
+        this.invalidateEpisode(false);
       }
       return;
     }
@@ -104,8 +133,7 @@ export class InterventionCoordinator {
       previousState.phase === "intervention" &&
       !isSameInterventionEpisode(previousState, state)
     ) {
-      this.episodeGeneration += 1;
-      this.activationArmed = true;
+      this.invalidateEpisode(true);
     }
 
     if (!this.activationArmed) return;
@@ -127,7 +155,36 @@ export class InterventionCoordinator {
     const context = captureContext(state);
     if (!context) return;
 
-    void this.requestActivation(context, requestGeneration);
+    if (this.activationDelayMs === 0) {
+      void this.requestActivation(context, requestGeneration);
+      return;
+    }
+
+    try {
+      this.pendingActivation = this.timer.schedule(() => {
+        this.pendingActivation = undefined;
+        if (this.disposed || this.episodeGeneration !== requestGeneration) {
+          return;
+        }
+        const currentState = this.previousState;
+        if (
+          !currentState ||
+          currentState.phase !== "intervention" ||
+          isTargetForeground(currentState)
+        ) {
+          return;
+        }
+        void this.requestActivation(context, requestGeneration);
+      }, this.activationDelayMs);
+    } catch (error: unknown) {
+      this.options.onActivationFailed?.({
+        ...context,
+        error: {
+          code: "activation-delay-failed",
+          message: errorMessage(error),
+        },
+      });
+    }
   }
 
   /**
@@ -137,7 +194,22 @@ export class InterventionCoordinator {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.invalidateEpisode(false);
     this.previousState = undefined;
+  }
+
+  private invalidateEpisode(rearm: boolean): void {
+    this.episodeGeneration += 1;
+    const pendingActivation = this.pendingActivation;
+    this.pendingActivation = undefined;
+    if (pendingActivation !== undefined) {
+      try {
+        this.timer.cancel(pendingActivation);
+      } catch {
+        // The generation guard still makes an uncancelled callback inert.
+      }
+    }
+    this.activationArmed = rearm;
   }
 
   private async requestActivation(
@@ -240,6 +312,12 @@ function errorToPlatformError(error: unknown): PlatformError {
     code: "activation-request-failed",
     message: message || "Application activation failed.",
   };
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === "string" && error) return error;
+  return "The final-warning timer could not be scheduled.";
 }
 
 function isPlatformError(error: unknown): error is PlatformError {
