@@ -97,9 +97,9 @@ body {
   transform: scale(1.085);
 }
 
-.pet-shell[data-pet-stage="persistent-stare"] .pet-visual {
+.pet-shell[data-pet-stage="persistent-side-eye"] .pet-visual {
   transform: scale(1.1);
-  animation: persistent-stare-arrival 700ms cubic-bezier(0.2, 0.9, 0.3, 1);
+  animation: persistent-side-eye-arrival 700ms cubic-bezier(0.2, 0.9, 0.3, 1);
 }
 
 .pet-visual.attention-pop {
@@ -117,7 +117,7 @@ body {
   }
 }
 
-@keyframes persistent-stare-arrival {
+@keyframes persistent-side-eye-arrival {
   0% {
     translate: -5% 0;
     opacity: 0.72;
@@ -169,7 +169,7 @@ body {
   margin: 0;
   padding: clamp(5px, 2.5vw, 7px) clamp(8px, 4vw, 12px);
   align-items: center;
-  gap: 7px;
+  gap: 0;
   border: 1px solid rgb(255 255 255 / 70%);
   border-radius: 999px;
   color: #5e4654;
@@ -206,11 +206,13 @@ body {
 
 #pet-hint {
   max-width: 0;
+  margin-inline-end: 0;
   overflow: hidden;
   opacity: 0;
   text-overflow: ellipsis;
   transition:
     max-width 220ms ease,
+    margin-inline-end 220ms ease,
     opacity 150ms ease;
   white-space: nowrap;
 }
@@ -219,6 +221,7 @@ body {
 .hint:hover #pet-hint,
 .hint:focus-visible #pet-hint {
   max-width: min(72vw, 260px);
+  margin-inline-end: 7px;
   opacity: 1;
 }
 
@@ -239,6 +242,7 @@ body {
   width: 7px;
   height: 7px;
   flex: 0 0 auto;
+  margin-inline-end: 7px;
   border-radius: 50%;
   background: #d77962;
   box-shadow: 0 0 0 3px rgb(215 121 98 / 16%);

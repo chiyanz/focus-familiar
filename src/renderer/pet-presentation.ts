@@ -15,8 +15,7 @@ export const PET_ASSET_PATHS = {
   nudgePawTap: "./assets/shokupan-cat/reactions/reaction-05-paw-tap.png",
   interventionWait:
     "./assets/shokupan-cat/reactions/reaction-06-polite-wait.png",
-  persistentStare:
-    "./assets/shokupan-cat/reactions/reaction-03-half-lens-stare.png",
+  persistentSideEye: "./assets/shokupan-cat/reactions/reaction-04-side-eye.png",
   forwardStretch:
     "./assets/shokupan-cat/idle-actions/idle-05-forward-stretch.png",
   pawGroom: "./assets/shokupan-cat/idle-actions/idle-06-paw-groom.png",
@@ -166,9 +165,10 @@ export const PET_PRESENTATIONS = {
 } as const satisfies Record<SessionPhase, PetPresentationDefinition>;
 
 export const PET_INTERVENTION_REMINDER_INTERVAL_MS = 15_000;
-export const PET_PERSISTENT_STARE_AFTER_MS = 30_000;
+export const PET_SIDE_EYE_AFTER_MS = PET_INTERVENTION_REMINDER_INTERVAL_MS;
+export const PET_HINT_REVEAL_DURATION_MS = 7_000;
 
-export type PetSnapshotPresentationStage = "base" | "persistent-stare";
+export type PetSnapshotPresentationStage = "base" | "persistent-side-eye";
 
 export interface PetSnapshotStatus {
   readonly statusText: string;
@@ -207,8 +207,7 @@ export function getPetSnapshotStatus(
   const reminderBeat = Math.floor(
     elapsedAfterThreshold / PET_INTERVENTION_REMINDER_INTERVAL_MS,
   );
-  const isPersistentStare =
-    elapsedAfterThreshold >= PET_PERSISTENT_STARE_AFTER_MS;
+  const isPersistentSideEye = elapsedAfterThreshold >= PET_SIDE_EYE_AFTER_MS;
   const attentionLevel = Math.min(3, 1 + Math.floor(reminderBeat / 2)) as
     | 1
     | 2
@@ -224,10 +223,55 @@ export function getPetSnapshotStatus(
     statusText: copy[Math.min(copy.length - 1, attentionLevel - 1)] ?? copy[0],
     attentionLevel,
     reminderBeat,
-    presentationStage: isPersistentStare ? "persistent-stare" : "base",
-    presentationAsset: isPersistentStare
-      ? PET_ASSET_PATHS.persistentStare
+    presentationStage: isPersistentSideEye ? "persistent-side-eye" : "base",
+    presentationAsset: isPersistentSideEye
+      ? PET_ASSET_PATHS.persistentSideEye
       : null,
+  };
+}
+
+export interface PetSnapshotTransitionCue {
+  readonly revealHint: boolean;
+  readonly emphasizePet: boolean;
+  readonly durationMs: number;
+}
+
+/**
+ * Decide whether a new authoritative snapshot deserves a readable, temporary
+ * status expansion. Duplicate counter snapshots remain silent, while every
+ * phase change, intervention reminder, and side-eye arrival is surfaced.
+ */
+export function getPetSnapshotTransitionCue(
+  previous: SessionSnapshot | undefined,
+  next: SessionSnapshot,
+): PetSnapshotTransitionCue {
+  const nextStatus = getPetSnapshotStatus(next);
+  if (!previous) {
+    const revealHint = next.phase !== "idle";
+    return {
+      revealHint,
+      emphasizePet: revealHint && next.phase === "intervention",
+      durationMs: PET_HINT_REVEAL_DURATION_MS,
+    };
+  }
+
+  const previousStatus = getPetSnapshotStatus(previous);
+  const phaseChanged = previous.phase !== next.phase;
+  const presentationChanged =
+    previousStatus.presentationStage !== nextStatus.presentationStage;
+  const interventionReminderChanged =
+    next.phase === "intervention" &&
+    (previous.phase !== "intervention" ||
+      previousStatus.reminderBeat !== nextStatus.reminderBeat);
+  const revealHint =
+    phaseChanged || presentationChanged || interventionReminderChanged;
+
+  return {
+    revealHint,
+    emphasizePet:
+      next.phase === "intervention" &&
+      (phaseChanged || presentationChanged || interventionReminderChanged),
+    durationMs: PET_HINT_REVEAL_DURATION_MS,
   };
 }
 

@@ -57,8 +57,9 @@ different running application, confirms the target is truly frontmost, and
 restores the original foreground application afterward.
 
 The approved Shokupan-cat presentation is now connected to live focus phases.
-Grace and nudge copy is concise. Intervention reminders briefly reveal the
-otherwise collapsed pet text, repeat on the heartbeat, and grow through three
+Grace and nudge copy is concise. Every phase transition and intervention
+reminder reveals the otherwise collapsed pet text for seven seconds. Reminders
+repeat on the heartbeat and grow through three
 bounded visual attention levels without changing the window or sprite bounds.
 Reduced-motion mode suppresses the pop and growth. The settings window shows concise state-specific copy and focused-time progress,
 including a display-only clock between authoritative runtime events. Pause,

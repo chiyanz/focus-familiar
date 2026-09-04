@@ -5,7 +5,7 @@ import idleInhalePeakUrl from "../renderer/assets/shokupan-cat/idle-loop/loop-03
 import idleInhaleStartUrl from "../renderer/assets/shokupan-cat/idle-loop/loop-02-inhale-start.png";
 import idleNeutralUrl from "../renderer/assets/shokupan-cat/idle-loop/loop-01-neutral.png";
 import graceGlanceUrl from "../renderer/assets/shokupan-cat/reactions/reaction-01-grace-glance.png";
-import persistentStareUrl from "../renderer/assets/shokupan-cat/reactions/reaction-03-half-lens-stare.png";
+import persistentSideEyeUrl from "../renderer/assets/shokupan-cat/reactions/reaction-04-side-eye.png";
 import interventionWaitUrl from "../renderer/assets/shokupan-cat/reactions/reaction-06-polite-wait.png";
 import nudgePawTapUrl from "../renderer/assets/shokupan-cat/reactions/reaction-05-paw-tap.png";
 
@@ -18,7 +18,7 @@ import {
   getPetSnapshotPresentation,
   getPetSnapshotStatus,
   PET_ASSET_PATHS,
-  PET_PERSISTENT_STARE_AFTER_MS,
+  PET_SIDE_EYE_AFTER_MS,
   type PetAssetPath,
   type PetHoverAction,
 } from "../renderer/pet-presentation";
@@ -53,7 +53,7 @@ const petAssetUrls: Readonly<Record<PetAssetPath, string>> = {
   [PET_ASSET_PATHS.idleInhalePeak]: idleInhalePeakUrl,
   [PET_ASSET_PATHS.idleExhaleStart]: idleExhaleStartUrl,
   [PET_ASSET_PATHS.graceGlance]: graceGlanceUrl,
-  [PET_ASSET_PATHS.persistentStare]: persistentStareUrl,
+  [PET_ASSET_PATHS.persistentSideEye]: persistentSideEyeUrl,
   [PET_ASSET_PATHS.nudgePawTap]: nudgePawTapUrl,
   [PET_ASSET_PATHS.interventionWait]: interventionWaitUrl,
   [PET_ASSET_PATHS.forwardStretch]: idleForwardStretchUrl,
@@ -78,10 +78,11 @@ const phaseButtons = Array.from(
 const reduceMotionInput = requireElement<HTMLInputElement>("#reduce-motion");
 const darkCanvasInput = requireElement<HTMLInputElement>("#dark-canvas");
 const autoDemoInput = requireElement<HTMLInputElement>("#auto-demo");
-const persistentStareInput =
-  requireElement<HTMLInputElement>("#persistent-stare");
+const persistentSideEyeInput = requireElement<HTMLInputElement>(
+  "#persistent-side-eye",
+);
 
-const PERSISTENT_STARE_PREVIEW = {
+const PERSISTENT_SIDE_EYE_PREVIEW = {
   schemaVersion: 1,
   sessionId: "presentation-lab",
   phase: "intervention",
@@ -92,8 +93,8 @@ const PERSISTENT_STARE_PREVIEW = {
   interventionAfterMs: 5_000,
   intensity: "balanced",
   focusedMs: 0,
-  awayMs: 5_000 + PET_PERSISTENT_STARE_AFTER_MS,
-  currentAwayMs: 5_000 + PET_PERSISTENT_STARE_AFTER_MS,
+  awayMs: 5_000 + PET_SIDE_EYE_AFTER_MS,
+  currentAwayMs: 5_000 + PET_SIDE_EYE_AFTER_MS,
   capabilities: {
     canStart: false,
     canPause: true,
@@ -129,13 +130,13 @@ function renderPhase(phase: SessionPhase): void {
   demoIndex = Math.max(0, SESSION_PHASES.indexOf(phase));
 
   const reducedMotion = reduceMotionInput.checked;
-  const showPersistentStare =
-    phase === "intervention" && persistentStareInput.checked;
-  const presentation = showPersistentStare
-    ? getPetSnapshotPresentation(PERSISTENT_STARE_PREVIEW, reducedMotion)
+  const showPersistentSideEye =
+    phase === "intervention" && persistentSideEyeInput.checked;
+  const presentation = showPersistentSideEye
+    ? getPetSnapshotPresentation(PERSISTENT_SIDE_EYE_PREVIEW, reducedMotion)
     : getPetPresentation(phase, reducedMotion);
-  const presentationStage = showPersistentStare
-    ? getPetSnapshotStatus(PERSISTENT_STARE_PREVIEW).presentationStage
+  const presentationStage = showPersistentSideEye
+    ? getPetSnapshotStatus(PERSISTENT_SIDE_EYE_PREVIEW).presentationStage
     : "base";
   const labels = PHASE_LABELS[phase];
 
@@ -151,8 +152,8 @@ function renderPhase(phase: SessionPhase): void {
   statusMessage.textContent = presentation.statusText;
   image.alt = `Shokupan cat: ${labels.title.toLocaleLowerCase()}`;
 
-  if (showPersistentStare) {
-    modeSummary.textContent = "Final close-up stare · after 30s";
+  if (showPersistentSideEye) {
+    modeSummary.textContent = "Final loaf side-eye · after 15s";
   } else if (presentation.mode === "ambient") {
     modeSummary.textContent = "Four-frame sleeping breath · 3.5s";
   } else if (
@@ -168,7 +169,7 @@ function renderPhase(phase: SessionPhase): void {
     const buttonPhase = button.dataset.phase;
     button.setAttribute("aria-pressed", String(buttonPhase === phase));
   }
-  persistentStareInput.disabled = phase !== "intervention";
+  persistentSideEyeInput.disabled = phase !== "intervention";
 
   stopPetAnimation();
   currentHoverAction = undefined;
@@ -263,7 +264,7 @@ autoDemoInput.addEventListener("change", () => {
   else stopDemoTimer();
 });
 
-persistentStareInput.addEventListener("change", () => {
+persistentSideEyeInput.addEventListener("change", () => {
   renderPhase(currentPhase);
 });
 

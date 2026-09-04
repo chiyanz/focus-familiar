@@ -11,10 +11,12 @@ import {
   getPetPresentation,
   getPetSnapshotPresentation,
   getPetSnapshotStatus,
+  getPetSnapshotTransitionCue,
   PET_ASSET_PATHS,
+  PET_HINT_REVEAL_DURATION_MS,
   PET_HOVER_ACTIONS,
   PET_PRESENTATIONS,
-  PET_PERSISTENT_STARE_AFTER_MS,
+  PET_SIDE_EYE_AFTER_MS,
   SLEEPING_BREATH_TIMELINE,
 } from "./pet-presentation";
 
@@ -149,7 +151,7 @@ describe("pet presentation", () => {
       PET_ASSET_PATHS.graceGlance,
       PET_ASSET_PATHS.nudgePawTap,
       PET_ASSET_PATHS.interventionWait,
-      PET_ASSET_PATHS.persistentStare,
+      PET_ASSET_PATHS.persistentSideEye,
     ]);
     const ambientAssets = new Set<string>(
       SLEEPING_BREATH_TIMELINE.map(({ asset }) => asset),
@@ -203,12 +205,21 @@ describe("pet presentation", () => {
     expect(
       getPetSnapshotStatus({
         ...base,
-        currentAwayMs:
-          base.interventionAfterMs + PET_PERSISTENT_STARE_AFTER_MS - 1,
+        currentAwayMs: base.interventionAfterMs + PET_SIDE_EYE_AFTER_MS - 1,
       }),
     ).toMatchObject({
       presentationStage: "base",
       presentationAsset: null,
+    });
+    expect(
+      getPetSnapshotStatus({
+        ...base,
+        awayMs: base.interventionAfterMs + PET_SIDE_EYE_AFTER_MS,
+        currentAwayMs: base.interventionAfterMs + PET_SIDE_EYE_AFTER_MS,
+      }),
+    ).toMatchObject({
+      presentationStage: "persistent-side-eye",
+      presentationAsset: PET_ASSET_PATHS.persistentSideEye,
     });
     expect(
       getPetSnapshotStatus({
@@ -220,8 +231,8 @@ describe("pet presentation", () => {
       statusText: "Editor is waiting",
       attentionLevel: 2,
       reminderBeat: 2,
-      presentationStage: "persistent-stare",
-      presentationAsset: PET_ASSET_PATHS.persistentStare,
+      presentationStage: "persistent-side-eye",
+      presentationAsset: PET_ASSET_PATHS.persistentSideEye,
     });
     expect(
       getPetSnapshotStatus({
@@ -233,12 +244,12 @@ describe("pet presentation", () => {
       statusText: "Let’s return to Editor",
       attentionLevel: 3,
       reminderBeat: 4,
-      presentationStage: "persistent-stare",
-      presentationAsset: PET_ASSET_PATHS.persistentStare,
+      presentationStage: "persistent-side-eye",
+      presentationAsset: PET_ASSET_PATHS.persistentSideEye,
     });
   });
 
-  it("adds the close-up stare only after prolonged intervention", () => {
+  it("adds the aligned loaf side-eye at the first intervention reminder", () => {
     const snapshot = {
       schemaVersion: 1 as const,
       sessionId: "session-1",
@@ -250,8 +261,8 @@ describe("pet presentation", () => {
       interventionAfterMs: 5_000,
       intensity: "balanced" as const,
       focusedMs: 0,
-      awayMs: 35_000,
-      currentAwayMs: 35_000,
+      awayMs: 20_000,
+      currentAwayMs: 20_000,
       capabilities: {
         canStart: false,
         canPause: true,
@@ -262,11 +273,70 @@ describe("pet presentation", () => {
 
     expect(getPetSnapshotPresentation(snapshot)).toMatchObject({
       phase: "intervention",
-      timeline: [{ asset: PET_ASSET_PATHS.persistentStare, durationMs: null }],
+      timeline: [
+        { asset: PET_ASSET_PATHS.persistentSideEye, durationMs: null },
+      ],
       mode: "still",
     });
-    expect(PET_ASSET_PATHS.persistentStare).toContain(
-      "reaction-03-half-lens-stare",
-    );
+    expect(PET_ASSET_PATHS.persistentSideEye).toContain("reaction-04-side-eye");
+  });
+
+  it("reveals readable text for phase changes and intervention beats only", () => {
+    const focused = {
+      schemaVersion: 1 as const,
+      sessionId: "session-1",
+      phase: "focused" as const,
+      task: "Ship",
+      targetApplication: { bundleId: "com.example.Editor", name: "Editor" },
+      durationMs: 60_000,
+      gracePeriodMs: 1_000,
+      interventionAfterMs: 5_000,
+      intensity: "balanced" as const,
+      focusedMs: 1_000,
+      awayMs: 0,
+      currentAwayMs: 0,
+      capabilities: {
+        canStart: false,
+        canPause: true,
+        canResume: false,
+        canStop: true,
+      },
+    };
+    const grace = {
+      ...focused,
+      phase: "grace" as const,
+      awayMs: 100,
+      currentAwayMs: 100,
+    };
+    const intervention = {
+      ...focused,
+      phase: "intervention" as const,
+      awayMs: 5_000,
+      currentAwayMs: 5_000,
+    };
+    const sideEye = {
+      ...intervention,
+      awayMs: 5_000 + PET_SIDE_EYE_AFTER_MS,
+      currentAwayMs: 5_000 + PET_SIDE_EYE_AFTER_MS,
+    };
+
+    expect(getPetSnapshotTransitionCue(undefined, focused)).toMatchObject({
+      revealHint: true,
+      emphasizePet: false,
+      durationMs: PET_HINT_REVEAL_DURATION_MS,
+    });
+    expect(getPetSnapshotTransitionCue(focused, grace)).toMatchObject({
+      revealHint: true,
+      emphasizePet: false,
+    });
+    expect(getPetSnapshotTransitionCue(grace, grace)).toMatchObject({
+      revealHint: false,
+      emphasizePet: false,
+    });
+    expect(getPetSnapshotTransitionCue(intervention, sideEye)).toMatchObject({
+      revealHint: true,
+      emphasizePet: true,
+      durationMs: 7_000,
+    });
   });
 });
